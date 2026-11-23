@@ -1,0 +1,16 @@
+.git
+node_modules
+web/dist
+web/node_modules
+engine/.env
+engine/data
+engine/__pycache__
+desktop/build
+desktop/dist
+desktop/vendor
+tools
+*.log
+.pytest_cache
+__pycache__
+*.pyc
+.env.production

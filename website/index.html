@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clipwise — Turn long videos into viral-ready clips automatically</title>
+  <meta name="description" content="Clipwise turns long videos into vertical clips automatically. Paste a YouTube, Kick or Twitch link or upload a file, and get subtitled, reframed clips ready to publish." />
+  <meta property="og:title" content="Clipwise — AI video clipping for creators" />
+  <meta property="og:description" content="Turn long videos into vertical clips ready for YouTube Shorts and TikTok automatically." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: #0f172a; background: #f8fafc; line-height: 1.6; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    header { padding: 20px 0; border-bottom: 1px solid #e2e8f0; background: #fff; position: sticky; top: 0; z-index: 10; }
+    .nav { display: flex; align-items: center; justify-content: space-between; }
+    .brand { font-weight: 800; font-size: 20px; color: #2563eb; text-decoration: none; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 12px 22px; border-radius: 999px; font-weight: 600; text-decoration: none; transition: transform .15s; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-ghost { border: 1px solid #cbd5e1; color: #0f172a; background: #fff; }
+    .hero { padding: 72px 0 48px; }
+    .hero h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 16px; }
+    .hero p { font-size: 18px; color: #475569; max-width: 640px; }
+    .hero-actions { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+    section { padding: 64px 0; }
+    h2 { font-size: 32px; letter-spacing: -0.01em; margin: 0 0 12px; }
+    .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; }
+    .card h3 { margin: 0 0 8px; }
+    .pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; align-items: stretch; }
+    .price-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 28px; display: flex; flex-direction: column; }
+    .price-card.popular { border-color: #2563eb; box-shadow: 0 12px 40px -16px rgba(37,99,235,.35); }
+    .price { font-size: 36px; font-weight: 800; margin: 8px 0; }
+    .price small { font-size: 14px; font-weight: 500; color: #64748b; }
+    ul { padding-left: 20px; }
+    .faq details { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+    .faq summary { font-weight: 600; cursor: pointer; }
+    footer { padding: 40px 0; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 14px; }
+    footer a { color: #2563eb; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container nav">
+      <a class="brand" href="/">Clipwise</a>
+      <div style="display:flex;gap:12px;">
+        <a class="btn btn-ghost" href="/login">Sign in</a>
+        <a class="btn btn-primary" href="/signup">Start free</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero container">
+      <h1>Turn long videos into clips ready to publish — automatically.</h1>
+      <p>Paste a YouTube, Kick or Twitch link or upload a file. Clipwise downloads the video, finds the best moments and generates vertical clips with subtitles, reframing and viral scoring — ready to download or publish.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="/signup">Try free</a>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+    </section>
+
+    <section id="how" class="container">
+      <h2>How it works</h2>
+      <div class="grid3">
+        <div class="card"><h3>1. Paste a link or upload</h3><p>Paste a YouTube, Kick or Twitch video/VOD link, or drag and drop an MP4, MOV, MKV, WEBM, M4V or AVI file.</p></div>
+        <div class="card"><h3>2. AI analyzes & cuts</h3><p>Transcription, scene detection and moment scoring find the best self-contained clips.</p></div>
+        <div class="card"><h3>3. Get clips ready</h3><p>Preview, edit subtitles, download MP4/SRT/ZIP or publish directly.</p></div>
+      </div>
+    </section>
+
+    <section class="container">
+      <h2>Features</h2>
+      <div class="grid3">
+        <div class="card"><h3>Import by link</h3><p>Paste a YouTube, Kick or Twitch URL and Clipwise downloads and processes it automatically.</p></div>
+        <div class="card"><h3>Auto transcription</h3><p>Word-level timestamps with faster-whisper, multi-language.</p></div>
+        <div class="card"><h3>Vertical reframing</h3><p>Face tracking, dynamic zoom, 9:16 / 1:1 / 16:9.</p></div>
+        <div class="card"><h3>Subtitle styles</h3><p>Shorts, Impact, Bold, Clean, Neon, Minimal and more.</p></div>
+        <div class="card"><h3>Viral scoring</h3><p>Hook, clarity, interest, pace and retention scoring.</p></div>
+        <div class="card"><h3>Editorial review</h3><p>Second pass checks thematic match and numbers.</p></div>
+        <div class="card"><h3>Export & publish</h3><p>MP4, SRT, JPG cover, ZIP bundle, YouTube & TikTok.</p></div>
+      </div>
+    </section>
+
+    <section class="container">
+      <h2>Pricing</h2>
+      <div class="pricing">
+        <div class="price-card">
+          <h3>Starter</h3>
+          <div class="price">$0 <small>/ forever</small></div>
+          <ul>
+            <li>2 clips per day</li>
+            <li>20 clips per month</li>
+            <li>1 project at a time</li>
+            <li>720p with watermark</li>
+            <li>All subtitle styles</li>
+          </ul>
+          <a class="btn btn-ghost" style="margin-top:auto;" href="/signup">Start free</a>
+        </div>
+        <div class="price-card popular">
+          <h3>Creator <span style="color:#2563eb;font-size:12px;">Most recommended</span></h3>
+          <div class="price">$5 <small>/ month</small></div>
+          <ul>
+            <li>120 clips per month</li>
+            <li>1080p exports</li>
+            <li>No watermark</li>
+            <li>3 projects at a time</li>
+            <li>2 team seats</li>
+          </ul>
+          <a class="btn btn-primary" style="margin-top:auto;" href="/signup">Choose Creator</a>
+        </div>
+        <div class="price-card">
+          <h3>Studio</h3>
+          <div class="price">$10 <small>/ month</small></div>
+          <ul>
+            <li>400 clips per month</li>
+            <li>Maximum render priority</li>
+            <li>8 projects at a time</li>
+            <li>5 team seats</li>
+            <li>Everything in Creator</li>
+          </ul>
+          <a class="btn btn-ghost" style="margin-top:auto;" href="/signup">Choose Studio</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="container faq">
+      <h2>Frequently asked questions</h2>
+      <details><summary>How does Clipwise work?</summary><p>Paste a YouTube, Kick or Twitch link or upload a video. The engine downloads it when needed, transcribes, detects scenes and scores moments, then renders vertical clips with subtitles.</p></details>
+      <details><summary>How are clips counted?</summary><p>Each successfully generated clip consumes one unit. Failed processing does not consume a unit.</p></details>
+      <details><summary>What happens when I run out of credits?</summary><p>You'll see a message with upgrade options. Daily limits reset every day, monthly limits per billing cycle.</p></details>
+      <details><summary>Can I cancel my subscription?</summary><p>Yes, anytime. You keep access until the end of the paid period.</p></details>
+      <details><summary>Is my video data safe?</summary><p>Videos are processed per user and access is protected by authentication.</p></details>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p><strong>Clipwise</strong> — AI video clipping platform.</p>
+      <p><a href="/privacy-en.html">Privacy</a> · <a href="/terms-en.html">Terms</a> · <a href="mailto:support@clipwise.app">Contact</a></p>
+      <p>© 2026 Clipwise</p>
+    </div>
+  </footer>
+</body>
+</html>

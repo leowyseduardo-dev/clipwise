@@ -1,0 +1,38 @@
+services:
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      CLIPFORGE_CLOUD_DIR: /data/cloud
+      WEB_DIST: /app/web/dist
+      FFMPEG_BIN: /usr/bin/ffmpeg
+      FFPROBE_BIN: /usr/bin/ffprobe
+      HF_HOME: /data/models
+    volumes:
+      - clipwise_data:/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  clipwise_data:
+  caddy_data:
+  caddy_config:
