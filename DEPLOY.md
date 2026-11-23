@@ -12,61 +12,105 @@ clips. No instala nada.
 
 > Una sola instancia. No levantar réplicas: SQLite y los workspaces son un volumen local.
 
-## 1. Requisitos
+## 1. Crear la cuenta y la VM en Oracle
 
-- VPS **Oracle Cloud Always Free** con Ubuntu 24.04.
-  - Recomendado: Ampere A1 (4 OCPU ARM / 24 GB).
-  - Alternativa: VM x86 free tier (1/8 OCPU / 1 GB) solo para pruebas; con 1 GB adds swap.
-- Dominio o subdominio apuntando a la IP del VPS.
-  - Sin dominio: use `app.TU_IP.sslip.io` (resuelve solo y Caddy emite certificado).
-- Git y Docker con Compose en el VPS.
+1. Regístrate en `https://www.oracle.com/cloud/free/`. Pide tarjeta de crédito, pero el
+   nivel **Always Free** no cobra mientras no excedas los límites.
+2. En la consola: **Compute → Instances → Create Instance**.
+   - Name: `clipwise`.
+   - Image: **Ubuntu 24.04** (Canonical).
+   - Shape: **Ampere A1 (ARM)**, 4 OCPU / 24 GB (Always Free). Si no hay capacidad en tu
+     región, usa `VM.Standard.E2.1.Micro` (1/8 OCPU / 1 GB) y añade swap.
+   - SSH key: genera una en tu Windows:
+     ```powershell
+     ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\clipwise_key
+     ```
+     Pega el contenido de `clipwise_key.pub` en el campo **Public SSH key**.
+   - Pulsa **Create**.
+3. Copia la **Public IP** de la instancia.
 
-## 2. Instalar Docker en el VPS
+## 2. Abrir los puertos 80 y 443
+
+En la consola: **Networking → Virtual Cloud Networks → tu VCN → Security Lists →
+Default Security List → Ingress Rules → Add Ingress Rules**:
+
+- Source CIDR `0.0.0.0/0`, Destination Port Range `80`, Protocol `TCP`.
+- Source CIDR `0.0.0.0/0`, Destination Port Range `443`, Protocol `TCP`.
+
+El puerto 22 ya suele estar abierto. Comprueba además el firewall del sistema:
 
 ```bash
-curl -fsSL https://get.docker.com | sh
-docker --version
-docker compose version
+sudo ufw status
 ```
 
-Si el VPS tiene poca RAM, cree swap antes del build:
+Si está activo: `sudo ufw allow 80 && sudo ufw allow 443`.
 
-```bash
-fallocate -l 4G /swapfile
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-```
-
-## 3. Subir el proyecto
+## 3. Conectar e instalar Docker
 
 Desde PowerShell en tu máquina:
 
 ```powershell
-scp -r C:\Users\leoca\OneDrive\Desktop\XD\clipforge root@TU_IP:/opt/clipwise
+ssh -i $env:USERPROFILE\.ssh\clipwise_key ubuntu@TU_IP
 ```
 
-No hace falta subir `node_modules`, `web/dist`, `.git`, `engine/.env` ni `desktop/dist`:
-Docker compila el frontend dentro de la imagen.
-
-## 4. Configurar variables
+Dentro del VPS:
 
 ```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu
+docker --version
+docker compose version
+```
+
+Si la VM tiene 1 GB de RAM, crea swap antes del build:
+
+```bash
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Sal (`exit`) y vuelve a entrar para que el grupo `docker` tenga efecto.
+
+## 4. Subir el proyecto
+
+Desde PowerShell en tu máquina:
+
+```powershell
+scp -i $env:USERPROFILE\.ssh\clipwise_key -r C:\Users\leoca\OneDrive\Desktop\XD\clipforge ubuntu@TU_IP:~/clipwise
+```
+
+Dentro del VPS:
+
+```bash
+sudo mkdir -p /opt
+sudo mv ~/clipwise /opt/clipwise
+sudo chown -R ubuntu:ubuntu /opt/clipwise
 cd /opt/clipwise
+```
+
+No hace falta subir `node_modules`, `web/dist`, `.git`, `engine/.env`, `.env.production`
+ni `desktop/dist`: Docker compila el frontend dentro de la imagen y las claves se ponen
+en `.env.production`.
+
+## 5. Configurar y levantar
+
+```bash
 cp .env.production.example .env.production
 nano .env.production
 ```
 
 Mínimo imprescindible:
 
-- `APP_DOMAIN`: tu dominio o `app.TU_IP.sslip.io`.
+- `APP_DOMAIN`: `app.TU_IP.sslip.io` (o tu dominio).
 - `CLIPFORGE_PUBLIC_ORIGIN`: la misma URL con `https://`.
 - `PAYPAL_ME_URL`: `https://paypal.me/TenderMarginAI`.
 - `CLIPFORGE_ADMIN_PASSWORD`: la clave real del administrador (nunca la deje en el ejemplo).
 - `WHISPER_MODEL`: `medium` o `large-v3` para máxima calidad; `small` si el VPS es corto de CPU.
 
-## 5. Levantar
+Levantar:
 
 ```bash
 docker compose up -d --build
@@ -74,7 +118,7 @@ docker compose logs -f app
 ```
 
 El primer build tarda varios minutos. El primer trabajo descarga el modelo de Whisper a
-`/data/models` (volume `clipwise_data`); puede tardar un poco más.
+`/data/models` (volumen `clipwise_data`); puede tardar un poco más.
 
 Verificar:
 
