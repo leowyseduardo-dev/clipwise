@@ -77,3 +77,4 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - `DEPLOY.md` contains the Oracle Always Free VPS steps, Caddy/HTTPS setup, Groq LLM option, cookies for YouTube, backups and updates.
 - Vercel + Turso + R2 cannot render clips on the free plan (10 s function timeout, no persistent filesystem); the VPS keeps clip generation on the public website with maximum quality.
 - Docker is not installed on the local build machine, so the image was not built here; the deployment files and the seed were verified, the image must be built on the VPS with `docker compose up -d --build`.
+- `DEPLOY-GCP.md` documents the same stack on a Google Cloud e2-micro always-free VM (1 GB RAM + swap, US regions only, 1 GB/month egress) as an alternative to Oracle. Cloud Run, Modal, Render/Koyeb and Vercel+Turso+R2 are compared in its final table; only a real VM gives 24/7 full FFmpeg/Whisper rendering for free.
