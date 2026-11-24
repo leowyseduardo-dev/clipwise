@@ -741,6 +741,7 @@ export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }
                 <li><a href="#faq" className="transition hover:text-slate-900">Preguntas frecuentes</a></li>
                 <li><a href="mailto:support@clipwise.app" className="transition hover:text-slate-900">Soporte</a></li>
                 <li><a href="/docs" className="transition hover:text-slate-900">Documentación</a></li>
+                <li><a href="/browser.html" className="transition hover:text-slate-900">Render en navegador (beta)</a></li>
               </ul>
             </div>
 
