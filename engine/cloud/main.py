@@ -2,8 +2,10 @@
 
 import asyncio
 import json
+import logging
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -15,11 +17,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from . import accounts, billing, mailer, seed
+from . import accounts, billing, mailer, paypal_billing, seed
 from .workers import Engines
 
 # The hosted process shares the engine's .env so one file configures both.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+log = logging.getLogger("uvicorn.error")
 
 
 def origin():
@@ -53,6 +57,10 @@ async def lifespan(app):
     app.state.http = httpx.AsyncClient(
         timeout=httpx.Timeout(180, connect=8), trust_env=False
     )
+    try:
+        await asyncio.to_thread(paypal_billing.bootstrap)
+    except Exception as exc:  # PayPal outages must not stop the engine.
+        log.warning("PayPal setup skipped: %s", exc)
     yield
     await app.state.http.aclose()
     await app.state.engines.close()
@@ -71,7 +79,8 @@ app = FastAPI(
 async def same_origin(request, call_next):
     if (
         request.method not in {"GET", "HEAD", "OPTIONS"}
-        and request.url.path != "/api/account/webhook"
+        and request.url.path
+        not in {"/api/account/webhook", "/api/billing/paypal/webhook"}
     ):
         if request.headers.get("origin") != origin():
             return JSONResponse({"detail": "Origen de solicitud no válido."}, 403)
@@ -84,7 +93,11 @@ async def same_origin(request, call_next):
 
 
 def person(request):
-    return accounts.principal(request.cookies.get("cf_session"))
+    identity = accounts.principal(request.cookies.get("cf_session"))
+    identity["plan"] = paypal_billing.reconcile_team(
+        identity["team"], identity["plan"]
+    )
+    return identity
 
 
 class Login(BaseModel):
@@ -199,6 +212,7 @@ def info(request: Request):
         for x in os.getenv("ADMIN_EMAILS", "").split(",")
         if x.strip()
     }
+    subscription = accounts.subscription(i["team"])
     return {
         "hosted": True,
         "signed_in": True,
@@ -216,13 +230,18 @@ def info(request: Request):
             os.getenv("STRIPE_SECRET_KEY") and os.getenv("STRIPE_WEBHOOK_SECRET")
         ),
         "paypal_me": os.getenv("PAYPAL_ME_URL", "").strip(),
+        "paypal": paypal_billing.public_config(),
+        "subscription": subscription,
         "admin": i["email"].lower() in admin_emails,
     }
 
 
 @app.get("/api/public/config")
 def public_config():
-    return {"paypal_me": os.getenv("PAYPAL_ME_URL", "").strip()}
+    return {
+        "paypal_me": os.getenv("PAYPAL_ME_URL", "").strip(),
+        "paypal": paypal_billing.public_config(),
+    }
 
 
 class Member(BaseModel):
@@ -293,7 +312,7 @@ def pay(plan: Literal["Creator", "Studio", "portal"], request: Request):
     if manual and not stripe:
         raise HTTPException(
             409,
-            "El pago con PayPal es manual. Paga desde la página de planes y un administrador activará tu cuenta.",
+            "El pago con PayPal es automático. Suscríbete desde Mi cuenta → Plan.",
         )
     return {"url": billing.checkout(i, plan, origin())}
 
@@ -311,6 +330,32 @@ async def webhook(request: Request):
     return {"received": True}
 
 
+class PayPalActivate(BaseModel):
+    subscription_id: str = Field(min_length=3, max_length=128)
+
+
+@app.post("/api/billing/paypal/activate")
+def paypal_activate(payload: PayPalActivate, request: Request):
+    return paypal_billing.activate(person(request), payload.subscription_id)
+
+
+@app.post("/api/billing/paypal/cancel")
+def paypal_cancel(request: Request):
+    return paypal_billing.cancel(person(request))
+
+
+@app.post("/api/billing/paypal/webhook")
+async def paypal_webhook(request: Request):
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > 1024 * 1024:
+            raise HTTPException(413, "Evento demasiado grande.")
+    return await asyncio.to_thread(
+        paypal_billing.webhook, bytes(data), request.headers
+    )
+
+
 def _admin(request):
     i = person(request)
     admin_emails = {
@@ -321,6 +366,12 @@ def _admin(request):
     if i["email"].lower() not in admin_emails:
         raise HTTPException(403, "Acceso de administrador requerido.")
     return i
+
+
+@app.post("/api/admin/paypal/setup")
+def admin_paypal_setup(request: Request):
+    _admin(request)
+    return paypal_billing.bootstrap()
 
 
 @app.get("/api/admin/overview")
@@ -387,6 +438,10 @@ def admin_plan(payload: AdminPlan, request: Request):
         )
         if not updated.rowcount:
             raise HTTPException(404, "Equipo no encontrado.")
+        conn.execute(
+            "UPDATE subscriptions SET status='MANUAL', updated_at=? WHERE team_id=?",
+            (int(time.time()), payload.team),
+        )
     return {"ok": True, "team": payload.team, "plan": payload.plan}
 
 
@@ -403,7 +458,7 @@ def admin_suspend(email: str, request: Request):
 
 ID = r"[0-9a-f]{12,64}"
 ROUTES = re.compile(
-    rf"(?:health|options|publishing/(?:callback|settings|connections|oauth/(?:youtube|tiktok)/(?:start|status|disconnect)|records/{ID})|jobs(?:/{ID}(?:/(?:download\.zip|cancel|retry))?)?|clips/{ID}(?:/(?:publish|description|copy|publication\.txt|edit|video\.mp4|thumb\.jpg|frame\.jpg|subtitles(?:\.srt)?|render))?|studio/(?:logo|dna|presets|calendar(?:/{ID})?|jobs/{ID}(?:/(?:week|duplicate|usage|youtube-stats))?|clips/{ID}/(?:editorial|hooks|strategy|battle|favorite)))"
+    rf"(?:health|options|publishing/(?:callback|settings|connections|oauth/(?:youtube|tiktok)/(?:start|status|disconnect)|records/{ID})|jobs(?:/{ID}(?:/(?:download\.zip|cancel|retry))?)?|clips/{ID}(?:/(?:publish|description|copy|publication\.txt|edit|video\.mp4|source\.mp4|thumb\.jpg|frame\.jpg|subtitles(?:\.srt)?|render|browser-render))?|studio/(?:logo|dna|presets|calendar(?:/{ID})?|jobs/{ID}(?:/(?:week|duplicate|usage|youtube-stats))?|clips/{ID}/(?:editorial|hooks|strategy|battle|favorite)))"
 )
 BILLABLE = re.compile(
     r"(?:^jobs$|/(?:retry|battle|hooks|edit|subtitles|render|description)$)"
@@ -439,7 +494,7 @@ async def engine(path: str, request: Request):
     port = await request.app.state.engines.get(i["team"])
     cap = (
         int(os.getenv("CLIPFORGE_CLOUD_UPLOAD_MB", "512")) * 1048576 + 2 * 1048576
-        if path == "jobs"
+        if path == "jobs" or path.endswith("/browser-render")
         else (3 * 1048576 if path == "studio/logo" else 1024 * 1024)
     )
     length = request.headers.get("content-length", "0")
@@ -506,6 +561,8 @@ async def engine(path: str, request: Request):
         "accept-ranges",
         "content-length",
         "content-encoding",
+        "x-clipwise-source-offset",
+        "access-control-expose-headers",
     }
     return StreamingResponse(
         body(),

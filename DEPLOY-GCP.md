@@ -89,7 +89,14 @@ Cambia:
 ```env
 APP_DOMAIN=app.TU_IP_EXTERNA.sslip.io
 CLIPFORGE_PUBLIC_ORIGIN=https://app.TU_IP_EXTERNA.sslip.io
-PAYPAL_ME_URL=https://paypal.me/TenderMarginAI
+PAYPAL_CLIENT_ID=BAAFvUUXDGuhU_4L6MWlDXs4PGXU6gD-OP2v-y_EkUlGvcMCrAcKjRDlPHZdgvWy7l0vAd5bsHQJJ9FqIM
+PAYPAL_CLIENT_SECRET=TU_SECRETO_DE_PAYPAL
+PAYPAL_MODE=live
+PAYPAL_PRODUCT_ID=PROD-0VJ49900FS465031M
+PAYPAL_CREATOR_PLAN_ID=P-9JK82163JY201791BNMCPAMA
+PAYPAL_STUDIO_PLAN_ID=P-73R478908B315820HNMCPAMI
+PAYPAL_PUBLIC_URL=https://app.TU_IP_EXTERNA.sslip.io
+PAYPAL_WEBHOOK_ID=
 CLIPFORGE_ADMIN_PASSWORD=TU_CLAVE_REAL
 WHISPER_MODEL=small
 ```
@@ -113,13 +120,15 @@ curl -I https://app.TU_IP_EXTERNA.sslip.io
 curl https://app.TU_IP_EXTERNA.sslip.io/api/public/config
 ```
 
-Debe devolver `{"paypal_me":"https://paypal.me/TenderMarginAI"}`.
+Debe devolver `"paypal":{"configured":true,...}`. Si el webhook no se creó solo, llama
+a `POST /api/admin/paypal/setup` con la sesión de administrador.
 
 ## 7. Administrar
 
 Entra a `https://app.TU_IP_EXTERNA.sslip.io`, inicia sesión con
-`Leowysgarcia@gmail.com` y la clave del paso 5. Activa planes en
-**Mi cuenta → Admin → Activar plan manual**.
+`Leowysgarcia@gmail.com` y la clave del paso 5. Los pagos de Creator y Studio se
+activan solos con PayPal. **Mi cuenta → Admin → Activar plan manual** queda como
+respaldo para casos especiales.
 
 ## 8. Límites y consejos
 

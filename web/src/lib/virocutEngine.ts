@@ -50,6 +50,7 @@ export type RenderOptions = {
   hook?: string;
   hookStyle?: OverlayStyle;
   watermark?: string;
+  background?: "blur" | "black";
   width?: number;
   height?: number;
   fps?: number;
@@ -634,17 +635,19 @@ function drawFrame(
   hook: string,
   hookStyle: OverlayStyle,
   watermark: string,
+  background: "blur" | "black" | undefined,
   time: number,
 ): void {
   const config = TEMPLATES[template];
   const videoWidth = video.videoWidth;
   const videoHeight = video.videoHeight;
+  const backgroundMode = background ?? (config.background === "blur" ? "blur" : "black");
 
   ctx.clearRect(0, 0, width, height);
-  if (config.background === "blur") {
+  if (backgroundMode === "blur") {
     const cover = sourceRect(videoWidth, videoHeight, width, height, 0.5, 0.5);
     ctx.save();
-    ctx.filter = "blur(28px)";
+    ctx.filter = `blur(${Math.max(8, Math.round((height * 28) / 1920))}px)`;
     ctx.drawImage(video, cover.sx, cover.sy, cover.sw, cover.sh, -40, -40, width + 80, height + 80);
     ctx.restore();
     ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -717,6 +720,20 @@ async function extractAudioBuffer(
   }
   if (written < length * 0.8) return null;
   return buffer;
+}
+
+async function resampleAudioBuffer(
+  buffer: AudioBuffer,
+  sampleRate = 48000,
+): Promise<AudioBuffer> {
+  if (buffer.sampleRate === sampleRate) return buffer;
+  const length = Math.max(1, Math.ceil(buffer.duration * sampleRate));
+  const context = new OfflineAudioContext(2, length, sampleRate);
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  source.start();
+  return context.startRendering();
 }
 
 async function chooseAudioCodec(): Promise<"aac" | "opus" | null> {
@@ -793,6 +810,10 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
   if (audioCodec) {
     try {
       audioBuffer = await extractAudioBuffer(input, start, end);
+      if (audioBuffer) {
+        // Chrome's AAC encoder only accepts 44.1/48 kHz; sources are often 22.05 kHz.
+        audioBuffer = await resampleAudioBuffer(audioBuffer, 48000);
+      }
     } catch {
       audioBuffer = null;
     }
@@ -822,6 +843,7 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
         options.hook ?? "",
         hookStyle,
         options.watermark ?? "",
+        options.background,
         frame / fps,
       );
       await videoSource.add(frame / fps, 1 / fps);
@@ -851,6 +873,49 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
   const buffer = target.buffer;
   if (!buffer) throw new Error("El render no produjo ningún archivo.");
   return new Blob([buffer], { type: "video/mp4" });
+}
+
+export type FrameRenderer = (
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  width: number,
+  height: number,
+  time: number,
+) => void;
+
+/**
+ * Builds the same frame Virocut renders, but for the live editor canvas.
+ * `time` is clip-relative: 0 is the first frame of the selected range.
+ */
+export function createFrameRenderer(options: RenderOptions): FrameRenderer {
+  const template = options.template ?? "vertical";
+  const focusX = clamp(options.focusX ?? 0.5, 0, 1);
+  const focusY = clamp(options.focusY ?? 0.42, 0, 1);
+  const words = options.words?.length ? options.words : cuesToWords(options.cues ?? []);
+  const groups = groupWords(words);
+  const captionsEnabled = options.captionsEnabled ?? groups.length > 0;
+  const captionStyle = options.captionStyle ?? "default";
+  const hookStyle = options.hookStyle ?? "impact";
+
+  return (ctx, video, width, height, time) => {
+    drawFrame(
+      ctx,
+      video,
+      width,
+      height,
+      template,
+      focusX,
+      focusY,
+      groups,
+      captionStyle,
+      captionsEnabled,
+      options.hook ?? "",
+      hookStyle,
+      options.watermark ?? "",
+      options.background,
+      time,
+    );
+  };
 }
 
 export async function probeVideo(file: File): Promise<{ duration: number; width: number; height: number }> {

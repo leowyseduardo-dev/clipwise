@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { regenerateClipDescription, saveSubtitles } from "../lib/api";
 import { categoryInfo } from "../lib/categories";
@@ -40,6 +40,10 @@ interface DraftCue {
   end: number;
   text: string;
 }
+
+const VirocutEditor = lazy(() =>
+  import("./VirocutEditor").then((module) => ({ default: module.VirocutEditor })),
+);
 
 interface ClipModalProps {
   clip: Clip;
@@ -92,6 +96,7 @@ export function ClipModal({
   layouts,
 }: ClipModalProps) {
   const [showEditor, setShowEditor] = useState(false);
+  const [showVirocut, setShowVirocut] = useState(false);
   const [drafts, setDrafts] = useState<DraftCue[]>(() =>
     cuesToDrafts(clip.subtitles.cues ?? []),
   );
@@ -226,17 +231,56 @@ export function ClipModal({
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-2 text-veru-paper/50 transition hover:bg-veru-paper/10 hover:text-veru-paper"
-            aria-label="Cerrar"
-            autoFocus
-          >
-            <IconX size={18} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {clip.status === "ready" && (
+              <button
+                type="button"
+                onClick={() => setShowVirocut((value) => !value)}
+                aria-pressed={showVirocut}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-semibold transition ${
+                  showVirocut
+                    ? "border-veru-ember/40 bg-veru-ember/15 text-veru-paper"
+                    : "border-veru-paper/10 bg-veru-paper/5 text-veru-paper/60 hover:border-veru-paper/25 hover:text-veru-paper"
+                }`}
+              >
+                <IconWand size={12} />
+                {showVirocut ? "Cerrar editor" : "Editor Virocut"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl p-2 text-veru-paper/50 transition hover:bg-veru-paper/10 hover:text-veru-paper"
+              aria-label="Cerrar"
+              autoFocus
+            >
+              <IconX size={18} />
+            </button>
+          </div>
         </div>
 
+        {showVirocut ? (
+          <div className="flex-1 overflow-y-auto">
+            <Suspense
+              fallback={
+                <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
+                  <IconLoader size={22} className="animate-spin text-veru-blush" />
+                  <p className="text-[11px] text-veru-paper/40">
+                    Cargando el editor Virocut…
+                  </p>
+                </div>
+              }
+            >
+              <VirocutEditor
+                key={clip.id}
+                clip={clip}
+                onClose={() => setShowVirocut(false)}
+                onUpdated={onUpdated}
+                onError={onError}
+              />
+            </Suspense>
+          </div>
+        ) : (
         <div className="grid flex-1 overflow-y-auto lg:grid-cols-[minmax(0,370px)_minmax(0,1fr)]">
           <div className="border-b border-veru-paper/5 bg-black/30 p-4 lg:border-b-0 lg:border-r">
             <div className="overflow-hidden rounded-2xl border border-veru-paper/10 bg-black">
@@ -615,6 +659,7 @@ export function ClipModal({
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

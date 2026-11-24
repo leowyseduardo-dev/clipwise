@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS admissions(id TEXT PRIMARY KEY,team TEXT NOT NULL,sta
 CREATE TABLE IF NOT EXISTS charge_resources(charge TEXT PRIMARY KEY REFERENCES charges ON DELETE CASCADE,resource TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS throttle(bucket TEXT PRIMARY KEY,stamp INTEGER NOT NULL,hits INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS password_resets(token TEXT PRIMARY KEY,user_id TEXT REFERENCES users,expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS subscriptions(id TEXT PRIMARY KEY,team_id TEXT NOT NULL,plan TEXT NOT NULL,plan_id TEXT NOT NULL,status TEXT NOT NULL,renews_at TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS subscriptions_team ON subscriptions(team_id, updated_at DESC);
 """
 
 
@@ -187,6 +189,59 @@ def principal(token):
                 403, "El plan actual no incluye tu plaza en este equipo."
             )
     return dict(row)
+
+
+def set_plan(team, plan):
+    with connection() as conn:
+        conn.execute("UPDATE teams SET plan=? WHERE id=?", (plan, team))
+
+
+def save_subscription(subscription_id, team, plan, plan_id, status, renews_at):
+    now = int(time.time())
+    with connection() as conn:
+        conn.execute(
+            """INSERT INTO subscriptions(id,team_id,plan,plan_id,status,renews_at,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?)
+               ON CONFLICT(id) DO UPDATE SET
+                 team_id=excluded.team_id,
+                 plan=excluded.plan,
+                 plan_id=excluded.plan_id,
+                 status=excluded.status,
+                 renews_at=excluded.renews_at,
+                 updated_at=excluded.updated_at""",
+            (subscription_id, team, plan, plan_id, status, renews_at, now, now),
+        )
+
+
+def update_subscription(subscription_id, status, renews_at=None):
+    with connection() as conn:
+        if renews_at is None:
+            conn.execute(
+                "UPDATE subscriptions SET status=?, updated_at=? WHERE id=?",
+                (status, int(time.time()), subscription_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE subscriptions SET status=?, renews_at=?, updated_at=? WHERE id=?",
+                (status, renews_at, int(time.time()), subscription_id),
+            )
+
+
+def subscription(team):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM subscriptions WHERE team_id=? ORDER BY updated_at DESC, rowid DESC LIMIT 1",
+            (team,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def subscription_by_id(subscription_id):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM subscriptions WHERE id=?", (subscription_id,)
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def period():

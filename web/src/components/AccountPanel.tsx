@@ -1,10 +1,9 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { PAYPAL_SUPPORT_EMAIL, paypalLink } from "../lib/paypal";
+import { PAYPAL_SUPPORT_EMAIL } from "../lib/paypal";
 import {
   IconAlert,
-  IconArrowRight,
   IconBolt,
   IconCheck,
   IconFilm,
@@ -16,6 +15,7 @@ import {
   IconUser,
   IconX,
 } from "./icons";
+import { PayPalSubscribeButton } from "./PayPalSubscribeButton";
 
 export type Account = {
   hosted: boolean;
@@ -29,6 +29,23 @@ export type Account = {
   role?: string;
   billing?: boolean;
   paypal_me?: string;
+  paypal?: {
+    configured: boolean;
+    client_id: string;
+    mode: string;
+    currency: string;
+    plans: Record<string, string>;
+  };
+  subscription?: {
+    id: string;
+    team_id: string;
+    plan: string;
+    plan_id: string;
+    status: string;
+    renews_at: string | null;
+    created_at: number;
+    updated_at: number;
+  } | null;
   teams?: { id: string; name: string }[];
   members?: { email: string; role: string }[];
   plans?: Record<string, number[]>;
@@ -98,6 +115,17 @@ function displayName(account: Account) {
   return account.email?.split("@")[0] ?? "Tu cuenta";
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function AccountPanel({
   account,
   adminData,
@@ -107,7 +135,8 @@ export function AccountPanel({
   onClose,
   onRefresh,
   onLogout,
-  onBilling,
+  onActivatePaypal,
+  onCancelPaypal,
   onSetPlan,
   onAddMember,
   onRemoveMember,
@@ -122,7 +151,8 @@ export function AccountPanel({
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onLogout: () => Promise<void>;
-  onBilling: (plan: string) => Promise<void>;
+  onActivatePaypal: (subscriptionId: string) => Promise<void>;
+  onCancelPaypal: () => Promise<void>;
   onSetPlan: (team: string, plan: string) => Promise<void>;
   onAddMember: (email: string, role: string) => Promise<void>;
   onRemoveMember: (email: string) => Promise<void>;
@@ -134,10 +164,20 @@ export function AccountPanel({
   const [memberRole, setMemberRole] = useState("editor");
   const [suspendEmail, setSuspendEmail] = useState("");
   const [planDrafts, setPlanDrafts] = useState<Record<string, string>>({});
+  const [paypalError, setPaypalError] = useState("");
 
   const plan = account.plan ?? "Starter";
-  const paypalMe = (account.paypal_me ?? "").trim();
-  const manualPaypal = Boolean(paypalMe);
+  const paypal = account.paypal;
+  const paypalReady = Boolean(
+    paypal?.configured && paypal.client_id && paypal.plans,
+  );
+  const subscription = account.subscription;
+  const subscriptionStatus = (subscription?.status ?? "").toUpperCase();
+  const subscriptionActive =
+    subscriptionStatus === "ACTIVE" || subscriptionStatus === "APPROVED";
+  const subscriptionCancelled = subscriptionStatus === "CANCELLED";
+  const subscriptionFailed = subscriptionStatus === "PAYMENT_FAILED";
+  const subscriptionManual = subscriptionStatus === "MANUAL";
   const used = account.used ?? 0;
   const limit = account.limit ?? 0;
   const remaining = Math.max(0, limit - used);
@@ -462,6 +502,19 @@ export function AccountPanel({
                       {plan}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">{meta.tagline}</p>
+                    {subscription && (
+                      <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
+                        {subscriptionActive && "Suscripción activa"}
+                        {subscriptionCancelled && "Suscripción cancelada"}
+                        {subscriptionFailed && "Pago pendiente en PayPal"}
+                        {subscriptionManual && "Plan activado manualmente"}
+                        {!subscriptionManual && subscription.renews_at
+                          ? ` · ${
+                              subscriptionCancelled ? "activa hasta" : "renueva el"
+                            } ${formatDate(subscription.renews_at)}`
+                          : ""}
+                      </p>
+                    )}
                   </div>
                   <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-blue-700">
                     ${meta.price}/mes
@@ -469,11 +522,24 @@ export function AccountPanel({
                 </div>
               </section>
 
+              {paypalError && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-[11px] font-medium leading-relaxed text-rose-700"
+                >
+                  <IconAlert size={14} className="mt-0.5 shrink-0" />
+                  {paypalError}
+                </div>
+              )}
+
               <div className="space-y-2.5">
                 {Object.entries(account.plans ?? {}).map(([name, limits]) => {
                   const info = PLAN_META[name] ?? PLAN_META.Starter;
                   const current = name === plan;
-                  const paid = account.plan !== "Starter";
+                  const paidPlan = name !== "Starter";
+                  const planId = paypal?.plans?.[name] ?? "";
+                  const canSubscribe =
+                    paidPlan && canManage && paypalReady && Boolean(planId);
                   return (
                     <div
                       key={name}
@@ -518,98 +584,151 @@ export function AccountPanel({
                           </li>
                         ))}
                       </ul>
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <span className="text-[9px] uppercase tracking-[0.1em] text-slate-400">
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <p className="text-[9px] uppercase tracking-[0.1em] text-slate-400">
                           {limits[0]} clips/mes · {limits[2]} proyectos a la vez
-                        </span>
-                        {!current &&
-                          (manualPaypal ? (
-                            canManage ? (
-                              plan === "Starter" ? (
-                                <a
-                                  href={paypalLink(paypalMe, info.price)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="button-primary px-3 py-1.5 text-[10px]"
-                                >
-                                  Pagar ${info.price} con PayPal
-                                  <IconArrowRight size={12} />
-                                </a>
-                              ) : (
-                                <a
-                                  href={`mailto:${PAYPAL_SUPPORT_EMAIL}?subject=${encodeURIComponent(
-                                    `Cambio de plan a ${name}`,
-                                  )}&body=${encodeURIComponent(
-                                    `Hola, quiero cambiar el plan del equipo ${
-                                      account.team ?? ""
-                                    } de ${plan} a ${name}.`,
-                                  )}`}
-                                  className="button-ghost px-3 py-1.5 text-[10px]"
-                                >
-                                  Solicitar cambio
-                                  <IconArrowRight size={12} />
-                                </a>
-                              )
-                            ) : (
-                              <span className="text-[9px] text-slate-400">
-                                Solo el propietario
-                              </span>
-                            )
-                          ) : (
-                            <button
-                              type="button"
-                              className="button-ghost px-3 py-1.5 text-[10px]"
-                              disabled={busy || !account.billing || !canManage}
-                              onClick={() => void onBilling(paid ? "portal" : name)}
-                              title={
-                                !canManage
-                                  ? "Solo el propietario puede cambiar el plan."
-                                  : !account.billing
-                                    ? "La facturación no está configurada en el servidor."
-                                    : undefined
-                              }
-                            >
-                              {busy ? (
-                                <IconLoader size={12} className="animate-spin" />
-                              ) : paid ? (
-                                "Gestionar suscripción"
-                              ) : (
-                                "Elegir plan"
-                              )}
-                              <IconArrowRight size={12} />
-                            </button>
-                          ))}
+                        </p>
+                        {current ? (
+                          <div className="mt-2 space-y-2">
+                            {paidPlan && subscriptionActive && canManage && (
+                              <button
+                                type="button"
+                                className="button-ghost w-full px-3 py-2 text-[10px]"
+                                disabled={busy}
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      "¿Cancelar tu suscripción? Mantendrás el plan hasta el final del periodo ya pagado.",
+                                    )
+                                  )
+                                    return;
+                                  setPaypalError("");
+                                  void onCancelPaypal().catch((error) =>
+                                    setPaypalError(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "No se pudo cancelar la suscripción.",
+                                    ),
+                                  );
+                                }}
+                              >
+                                {busy ? (
+                                  <IconLoader size={12} className="animate-spin" />
+                                ) : (
+                                  "Cancelar suscripción"
+                                )}
+                              </button>
+                            )}
+                            {paidPlan && subscriptionCancelled && canSubscribe && (
+                              <div>
+                                <p className="mb-1.5 text-[9px] leading-relaxed text-amber-600">
+                                  Tu suscripción está cancelada. Reactívala para seguir
+                                  con {name}.
+                                </p>
+                                <PayPalSubscribeButton
+                                  clientId={paypal?.client_id ?? ""}
+                                  mode={paypal?.mode === "sandbox" ? "sandbox" : "live"}
+                                  planId={planId}
+                                  planName={name}
+                                  teamId={account.team ?? ""}
+                                  disabled={busy}
+                                  onActivated={async (id) => {
+                                    setPaypalError("");
+                                    await onActivatePaypal(id);
+                                  }}
+                                  onError={setPaypalError}
+                                />
+                              </div>
+                            )}
+                            {paidPlan && subscriptionFailed && (
+                              <p className="text-[9px] leading-relaxed text-amber-600">
+                                PayPal no pudo cobrar. Actualiza tu método de pago en
+                                PayPal; reintentaremos automáticamente.
+                              </p>
+                            )}
+                            {paidPlan && subscriptionManual && canSubscribe && (
+                              <div>
+                                <p className="mb-1.5 text-[9px] leading-relaxed text-slate-400">
+                                  Plan manual. Activa la suscripción automática para
+                                  renovarlo solo.
+                                </p>
+                                <PayPalSubscribeButton
+                                  clientId={paypal?.client_id ?? ""}
+                                  mode={paypal?.mode === "sandbox" ? "sandbox" : "live"}
+                                  planId={planId}
+                                  planName={name}
+                                  teamId={account.team ?? ""}
+                                  disabled={busy}
+                                  onActivated={async (id) => {
+                                    setPaypalError("");
+                                    await onActivatePaypal(id);
+                                  }}
+                                  onError={setPaypalError}
+                                />
+                              </div>
+                            )}
+                            {paidPlan && !subscription && (
+                              <p className="text-[9px] leading-relaxed text-slate-400">
+                                Este plan se activó manualmente. Para gestionarlo
+                                automáticamente, suscríbete desde aquí.
+                              </p>
+                            )}
+                          </div>
+                        ) : name === "Starter" ? (
+                          <p className="mt-2 text-[9px] leading-relaxed text-slate-400">
+                            {plan !== "Starter"
+                              ? "Cancela tu suscripción para volver a Starter."
+                              : "Plan gratuito activo."}
+                          </p>
+                        ) : canSubscribe ? (
+                          <div className="mt-2 space-y-2">
+                            {plan !== "Starter" && (
+                              <p className="text-[9px] leading-relaxed text-amber-600">
+                                Al activar {name}, cancelaremos tu suscripción actual.
+                              </p>
+                            )}
+                            <PayPalSubscribeButton
+                              clientId={paypal?.client_id ?? ""}
+                              mode={paypal?.mode === "sandbox" ? "sandbox" : "live"}
+                              planId={planId}
+                              planName={name}
+                              teamId={account.team ?? ""}
+                              disabled={busy}
+                              onActivated={async (id) => {
+                                setPaypalError("");
+                                await onActivatePaypal(id);
+                              }}
+                              onError={setPaypalError}
+                            />
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[9px] leading-relaxed text-slate-400">
+                            {!canManage
+                              ? "Solo el propietario puede cambiar el plan."
+                              : "PayPal no está configurado. Escribe a " +
+                                PAYPAL_SUPPORT_EMAIL +
+                                "."}
+                          </p>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {manualPaypal ? (
-                <p className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-3 text-[10px] leading-relaxed text-blue-700">
+              {paypalReady ? (
+                <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-[10px] leading-relaxed text-emerald-700">
                   <IconCheck size={13} className="mt-0.5 shrink-0" />
-                  Pago manual con PayPal. Después de pagar, un administrador activa tu
-                  plan. Usa el mismo correo de tu cuenta y, si tienes dudas, escribe a{" "}
-                  {PAYPAL_SUPPORT_EMAIL}.
+                  Pago automático con PayPal. Al confirmar la suscripción, el plan se
+                  activa al instante, sin solicitudes ni esperas. Puedes cancelar desde
+                  esta pantalla.
                 </p>
-              ) : !account.billing ? (
+              ) : (
                 <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[10px] leading-relaxed text-amber-700">
                   <IconAlert size={13} className="mt-0.5 shrink-0" />
-                  Los pagos manuales con PayPal aún no están configurados. Escribe a{" "}
-                  {PAYPAL_SUPPORT_EMAIL} para activar tu plan.
+                  PayPal no está configurado en el servidor. Escribe a{" "}
+                  {PAYPAL_SUPPORT_EMAIL}.
                 </p>
-              ) : null}
-
-              {account.billing && !manualPaypal && account.plan !== "Starter" && canManage && (
-                <button
-                  type="button"
-                  className="button-ghost w-full"
-                  disabled={busy}
-                  onClick={() => void onBilling("portal")}
-                >
-                  <IconSettings size={14} />
-                  Abrir portal de facturación
-                </button>
               )}
             </>
           )}

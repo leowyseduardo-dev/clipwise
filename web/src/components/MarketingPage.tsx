@@ -1,7 +1,3 @@
-import { useEffect, useState } from "react";
-
-import { getJson } from "../lib/api";
-import { paypalLink } from "../lib/paypal";
 import {
   IconArrowRight,
   IconBolt,
@@ -163,7 +159,7 @@ const FAQ = [
   },
   {
     q: "¿Puedo cambiar o cancelar mi plan?",
-    a: "Sí. Desde tu cuenta o escribiéndonos a support@clipwise.app. El cambio se aplica al ciclo siguiente y conservas el acceso hasta el final del periodo pagado.",
+    a: "Sí. Desde Mi cuenta → Plan puedes cancelar la suscripción; mantienes el acceso hasta el final del periodo pagado. Para cambiar de plan, suscríbete al nuevo y cancelaremos el anterior automáticamente.",
   },
   {
     q: "¿Qué pasa con mis vídeos?",
@@ -172,20 +168,6 @@ const FAQ = [
 ];
 
 export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }) {
-  const [paypalMe, setPaypalMe] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-    getJson<{ paypal_me?: string }>("/api/public/config")
-      .then((config) => {
-        if (alive) setPaypalMe((config.paypal_me ?? "").trim());
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   return (
     <div className="relative z-10 min-h-screen bg-white">
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
@@ -582,34 +564,19 @@ export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }
                     ))}
                   </ul>
 
-                  {plan.price > 0 && paypalMe ? (
-                    <a
-                      href={paypalLink(paypalMe, plan.price)}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Pagar el plan ${plan.name} con PayPal`}
-                      className={`mt-6 w-full ${
-                        plan.highlight ? "button-primary py-3" : "button-ghost py-3"
-                      }`}
-                    >
-                      Pagar ${plan.price} con PayPal
-                      <IconArrowRight size={14} />
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onStart("register")}
-                      className={`mt-6 w-full ${
-                        plan.highlight ? "button-primary py-3" : "button-ghost py-3"
-                      }`}
-                    >
-                      {plan.cta}
-                      <IconArrowRight size={14} />
-                    </button>
-                  )}
-                  {plan.price > 0 && paypalMe && (
+                  <button
+                    type="button"
+                    onClick={() => onStart("register")}
+                    className={`mt-6 w-full ${
+                      plan.highlight ? "button-primary py-3" : "button-ghost py-3"
+                    }`}
+                  >
+                    {plan.cta}
+                    <IconArrowRight size={14} />
+                  </button>
+                  {plan.price > 0 && (
                     <p className="mt-2 text-center text-[9px] text-slate-400">
-                      Pago manual · usa el correo de tu cuenta
+                      Suscripción automática con PayPal desde tu cuenta
                     </p>
                   )}
                 </article>
@@ -617,10 +584,9 @@ export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }
             </div>
 
             <p className="mt-6 text-center text-[11px] text-slate-400">
-              Precios en USD. El plan Starter no pide tarjeta.{" "}
-              {paypalMe
-                ? "Los pagos con PayPal se confirman manualmente: usa el mismo correo de tu cuenta y activaremos el plan."
-                : "Los cambios de plan se solicitan desde tu cuenta y un administrador los activa."}
+              Precios en USD. El plan Starter no pide tarjeta. Los planes Creator y
+              Studio se pagan con PayPal y se activan automáticamente al confirmar la
+              suscripción.
             </p>
           </div>
         </section>

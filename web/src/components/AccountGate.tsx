@@ -7,7 +7,13 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
-import { getJson, sendJson, ApiError } from "../lib/api";
+import {
+  activatePaypalSubscription,
+  cancelPaypalSubscription,
+  getJson,
+  sendJson,
+  ApiError,
+} from "../lib/api";
 import { AccountPanel } from "./AccountPanel";
 import type { Account, AdminOverview, AdminTeam } from "./AccountPanel";
 import { AuthScreen } from "./AuthScreen";
@@ -84,14 +90,38 @@ export function AccountGate({ children }: { children: ReactNode }) {
     }
   }
 
-  async function billing(plan: string) {
+  async function activatePaypal(subscriptionId: string) {
     setBusy(true);
     setError("");
     try {
-      const res = await sendJson<{ url: string }>("/api/account/billing/" + plan, "POST");
-      window.location.assign(res.url);
+      await activatePaypalSubscription(subscriptionId);
+      await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "No se pudo abrir la facturación.");
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "No se pudo activar el plan.";
+      setError(message);
+      throw caught;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelPaypal() {
+    setBusy(true);
+    setError("");
+    try {
+      await cancelPaypalSubscription();
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "No se pudo cancelar la suscripción.",
+      );
+      throw caught;
+    } finally {
       setBusy(false);
     }
   }
@@ -168,7 +198,8 @@ export function AccountGate({ children }: { children: ReactNode }) {
             }
           }}
           onLogout={logout}
-          onBilling={billing}
+          onActivatePaypal={activatePaypal}
+          onCancelPaypal={cancelPaypal}
           onSetPlan={(team, plan) =>
             act(async () => {
               await sendJson("/api/admin/plan", "POST", { team, plan });

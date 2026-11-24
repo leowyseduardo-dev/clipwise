@@ -106,7 +106,11 @@ Mínimo imprescindible:
 
 - `APP_DOMAIN`: `app.TU_IP.sslip.io` (o tu dominio).
 - `CLIPFORGE_PUBLIC_ORIGIN`: la misma URL con `https://`.
-- `PAYPAL_ME_URL`: `https://paypal.me/TenderMarginAI`.
+- `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`: credenciales de la app de PayPal.
+- `PAYPAL_MODE`: `live` (o `sandbox` para pruebas).
+- `PAYPAL_PRODUCT_ID`, `PAYPAL_CREATOR_PLAN_ID`, `PAYPAL_STUDIO_PLAN_ID`: IDs del
+  catálogo de Clipwise. Ya vienen rellenados en el ejemplo.
+- `PAYPAL_PUBLIC_URL`: la misma URL pública. Con esto el servidor crea el webhook solo.
 - `CLIPFORGE_ADMIN_PASSWORD`: la clave real del administrador (nunca la deje en el ejemplo).
 - `WHISPER_MODEL`: `medium` o `large-v3` para máxima calidad; `small` si el VPS es corto de CPU.
 
@@ -127,14 +131,51 @@ curl -I https://TU_DOMINIO
 curl https://TU_DOMINIO/api/public/config
 ```
 
-Debe devolver `{"paypal_me":"https://paypal.me/TenderMarginAI"}`.
+Debe devolver `"paypal":{"configured":true,...}` y los IDs de los planes Creator y
+Studio. Si `configured` es `false`, revise `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`.
+
+### PayPal: activación automática
+
+El flujo es: el cliente entra en **Mi cuenta → Plan**, pulsa el botón de PayPal, aprueba
+la suscripción y el servidor verifica el pago con PayPal. El plan se activa en el mismo
+momento, sin que nadie tenga que aprobarlo.
+
+- El `PAYPAL_CLIENT_SECRET` se queda en el servidor. El navegador solo recibe el
+  `client_id` y los IDs de los planes, que son públicos.
+- Al arrancar, si `PAYPAL_PUBLIC_URL` es una URL HTTPS, el servidor registra el webhook
+  `https://TU_DOMINIO/api/billing/paypal/webhook` con los eventos de suscripción y pagos.
+- Si el webhook no se creó, entre como administrador y ejecute:
+
+  ```bash
+  curl -c cookies.txt -X POST https://TU_DOMINIO/api/account/login \
+    -H "Content-Type: application/json" -H "Origin: https://TU_DOMINIO" \
+    -d '{"email":"Leowysgarcia@gmail.com","password":"TU_CLAVE"}'
+  curl -b cookies.txt -X POST https://TU_DOMINIO/api/admin/paypal/setup
+  ```
+
+  La respuesta incluye `catalog` y `webhook_id`. También puede crear el webhook a mano en
+  el panel de PayPal con esa URL y los eventos:
+  `BILLING.SUBSCRIPTION.ACTIVATED`, `BILLING.SUBSCRIPTION.UPDATED`,
+  `BILLING.SUBSCRIPTION.CANCELLED`, `BILLING.SUBSCRIPTION.EXPIRED`,
+  `BILLING.SUBSCRIPTION.SUSPENDED`, `BILLING.SUBSCRIPTION.PAYMENT.FAILED` y
+  `PAYMENT.SALE.COMPLETED`. Pegue el ID en `PAYPAL_WEBHOOK_ID` y reinicie.
+- La activación por `onApprove` funciona aunque el webhook tarde en configurarse. El
+  webhook mantiene sincronizadas las renovaciones, cancelaciones y fallos de pago.
+- Nunca ponga `PAYPAL_WEBHOOK_INSECURE=1` en producción. Esa variable solo existe para
+  probar el endpoint en local, donde PayPal no puede llegar a `127.0.0.1`.
+- Prueba real: suscríbete a Creator ($5), comprueba que el plan cambia solo y cancela
+  desde **Mi cuenta → Plan**. El acceso se mantiene hasta el final del periodo pagado.
 
 ## 6. Administrar planes
 
+Los pagos de Creator y Studio son automáticos: el cliente paga con PayPal y el plan se
+activa al instante. El panel **Mi cuenta → Admin → Activar plan manual** queda como
+respaldo para casos especiales (reembolsos, cuentas de prueba o pagos fuera de PayPal).
+
 1. Abra `https://TU_DOMINIO` e inicie sesión con `CLIPFORGE_ADMIN_EMAIL` y
    `CLIPFORGE_ADMIN_PASSWORD`.
-2. **Mi cuenta → Admin → Activar plan manual**: ahí activa Creator/Studio cuando
-   reciba un pago en PayPal.
+2. **Mi cuenta → Admin → Activar plan manual**: úsalo solo si necesitas cambiar un plan
+   sin pasar por PayPal.
 3. El seed del administrador es idempotente: si el usuario ya existe, solo asegura que
    su equipo quede en Studio. Si quiere desactivarlo, ponga `CLIPFORGE_SEED_ADMIN=0` y
    reinicie.

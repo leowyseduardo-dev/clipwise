@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 import shutil
@@ -791,6 +792,136 @@ def stream_clip_video(clip_id: str) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Archivo de video no encontrado.")
     return FileResponse(path, media_type="video/mp4")
+
+
+@app.get("/api/clips/{clip_id}/source.mp4")
+def stream_clip_source(clip_id: str) -> FileResponse:
+    """Original footage for the browser editor.
+
+    Long jobs download a clip-sized section instead of the whole broadcast;
+    the response header tells the browser which absolute time the file starts at.
+    """
+    clip, job, workdir = _require_clip(clip_id)
+    from .pipeline import _ensure_clip_section, _source_path
+
+    offset = 0.0
+    try:
+        if (job.get("meta") or {}).get("long_mode"):
+            path = _ensure_clip_section(job, clip, workdir)
+            offset = float(clip["start"])
+        else:
+            path = _source_path(job, workdir)
+    except MediaError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404, detail="El video original no está disponible para este clip."
+        ) from exc
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        headers={
+            "X-Clipwise-Source-Offset": f"{offset:.3f}",
+            "Access-Control-Expose-Headers": "X-Clipwise-Source-Offset",
+        },
+    )
+
+
+@app.post("/api/clips/{clip_id}/browser-render")
+async def save_browser_render(
+    clip_id: str,
+    file: UploadFile = File(...),
+    options: str = Form("{}"),
+) -> dict[str, Any]:
+    """Persist a clip rendered in the browser (Virocut engine).
+
+    The render replaces the server FFmpeg output; the source and the rest of the
+    job stay untouched so the editor can keep iterating.
+    """
+    clip, _, workdir = _require_clip(clip_id)
+    try:
+        parsed = json.loads(options or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Opciones del editor inválidas.") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=400, detail="Opciones del editor inválidas.")
+
+    clip_dir = workdir / "clips" / clip_id
+    clip_dir.mkdir(parents=True, exist_ok=True)
+    suffix = uuid.uuid4().hex[:12]
+    video_path = clip_dir / f"video-{suffix}.mp4"
+    total = 0
+    try:
+        with video_path.open("wb") as handle:
+            while chunk := await file.read(1024 * 1024):
+                total += len(chunk)
+                if total > 512 * 1024 * 1024:
+                    raise HTTPException(
+                        status_code=413, detail="El render supera el límite de 512 MB."
+                    )
+                handle.write(chunk)
+    except Exception:
+        video_path.unlink(missing_ok=True)
+        raise
+    if total < 1024:
+        video_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="El render está vacío.")
+
+    from .render import _extract_thumbnail, cleanup_old_outputs
+    from .utils import probe_media
+
+    try:
+        info = probe_media(video_path)
+    except Exception as exc:
+        video_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="El archivo no es un video válido.") from exc
+
+    duration = float(info.get("duration") or (float(clip["end"]) - float(clip["start"])))
+    thumb_path = clip_dir / f"thumb-{suffix}.jpg"
+    try:
+        _extract_thumbnail(video_path, thumb_path, duration)
+    except Exception:
+        thumb_path.unlink(missing_ok=True)
+
+    overlay = dict(clip.get("overlay") or {})
+    render_options = dict(overlay.get("render_options") or {})
+    render_options["browser_engine"] = True
+    render_options["virocut"] = {
+        "template": str(parsed.get("template") or "vertical")[:40],
+        "caption_style": str(parsed.get("caption_style") or "default")[:40],
+        "hook": str(parsed.get("hook") or "")[:160],
+        "hook_style": str(parsed.get("hook_style") or "impact")[:40],
+        "watermark": str(parsed.get("watermark") or "")[:80],
+        "focus_x": _bounded(parsed.get("focus_x"), 0.5),
+        "focus_y": _bounded(parsed.get("focus_y"), 0.42),
+        "captions_enabled": bool(parsed.get("captions_enabled", True)),
+        "background": str(parsed.get("background") or "blur")[:16],
+    }
+    overlay["render_options"] = render_options
+
+    fields: dict[str, Any] = {
+        "status": "ready",
+        "error": None,
+        "duration": round(duration, 3),
+        "video_file": video_path.relative_to(workdir).as_posix(),
+        "overlay_json": overlay,
+    }
+    keep: set[Path] = {video_path}
+    if thumb_path.exists():
+        fields["thumb_file"] = thumb_path.relative_to(workdir).as_posix()
+        keep.add(thumb_path)
+    elif clip.get("thumb_file") and (workdir / clip["thumb_file"]).exists():
+        keep.add(workdir / clip["thumb_file"])
+    db.update_clip(clip_id, **fields)
+    cleanup_old_outputs(clip_dir, keep=keep)
+    return _clip_out(db.get_clip(clip_id) or clip)
+
+
+def _bounded(value: Any, default: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 @app.get("/api/clips/{clip_id}/thumb.jpg")

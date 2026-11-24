@@ -80,6 +80,26 @@ export function getOptions(): Promise<OptionsResponse> {
   return getJson<OptionsResponse>("/api/options");
 }
 
+export function activatePaypalSubscription(subscriptionId: string): Promise<{
+  ok: boolean;
+  plan: string;
+  status: string;
+  renews_at: string | null;
+}> {
+  return sendJson("/api/billing/paypal/activate", "POST", {
+    subscription_id: subscriptionId,
+  });
+}
+
+export function cancelPaypalSubscription(): Promise<{
+  ok: boolean;
+  status: string;
+  active_until: string | null;
+  plan: string;
+}> {
+  return sendJson("/api/billing/paypal/cancel", "POST");
+}
+
 export async function listJobs(): Promise<Job[]> {
   const data = await getJson<{ jobs: Job[] }>("/api/jobs");
   return data.jobs;
@@ -181,6 +201,47 @@ export function saveClipEdit(clipId: string, body: {
 
 export function clipFrameUrl(clipId: string, seconds = 0): string {
   return `/api/clips/${clipId}/frame.jpg?t=${Math.max(0, seconds).toFixed(2)}`;
+}
+
+export function clipSourceUrl(clipId: string): string {
+  return `/api/clips/${clipId}/source.mp4`;
+}
+
+export function uploadBrowserRender(
+  clipId: string,
+  blob: Blob,
+  options: Record<string, unknown>,
+  onProgress?: (percent: number) => void,
+): Promise<Clip> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", blob, `clip-${clipId}.mp4`);
+    form.append("options", JSON.stringify(options));
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/clips/${clipId}/browser-render`);
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.response as Clip);
+        return;
+      }
+      const detail = (xhr.response as { detail?: unknown } | null)?.detail;
+      reject(
+        new ApiError(
+          typeof detail === "string" ? detail : `Error ${xhr.status}`,
+          xhr.status,
+        ),
+      );
+    };
+    xhr.onerror = () =>
+      reject(new ApiError("No se pudo subir el render al servidor.", 0));
+    xhr.send(form);
+  });
 }
 
 export function getPublishingSettings(): Promise<PublishingSettings> {
