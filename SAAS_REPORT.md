@@ -65,6 +65,7 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - PayPal webhook registered and stored as `2EJ44015Y0955270F` in `paypal_catalog.json`; the public webhook URL is `https://clipwise.tail7dfb82.ts.net/api/billing/paypal/webhook`.
 - Malformed scanner paths that Windows rejects as filenames now return `404` instead of `500` (`SafeStaticFiles` in `engine/cloud/main.py`).
 - Public host bootstrap: `%LOCALAPPDATA%\Clipwise\start-cloud.ps1` starts uvicorn with the public origin and restarts it every 5 s if it exits. A Startup-folder shortcut runs it at user logon. AC standby and hibernate timeouts are `0`.
+- Launcher failover verified: killed the uvicorn process, the detached launcher started a new one within 10 s, and the public root returned `200` again.
 - Account plan tab verified in headless Chrome: the PayPal JS SDK loads with the live client ID, three PayPal button iframes render for Creator, the copy says "Pago automático con PayPal", and no `paypal.me` or manual-activation text remains.
 - Virocut editor verified end to end in headless Chrome: edited a 30 s source, rendered and saved a 12.011 s clip at 1080×1920, 30 fps, H.264 + AAC (48 kHz stereo), 6,009,144 bytes; the clip API reports `browser_engine: true` and the download link serves the same file.
 - Link job creation verified through the cloud proxy: the URL is validated, a job is queued and the engine starts the remote download. Live YouTube/Kick/Twitch downloads depend on the host's DNS and platform access.
