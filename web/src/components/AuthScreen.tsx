@@ -469,6 +469,7 @@ export function AuthScreen({
                         name="name"
                         type="text"
                         autoComplete="name"
+                        maxLength={80}
                         placeholder="Tu nombre"
                         className="auth-input"
                         value={form.name}
@@ -496,6 +497,7 @@ export function AuthScreen({
                         type="email"
                         inputMode="email"
                         autoComplete="email"
+                        maxLength={254}
                         placeholder="tu@correo.com"
                         className="auth-input"
                         value={form.email}
@@ -533,6 +535,7 @@ export function AuthScreen({
                         name="password"
                         type={showPassword ? "text" : "password"}
                         autoComplete={isRegister || isReset ? "new-password" : "current-password"}
+                        maxLength={256}
                         placeholder={isRegister || isReset ? "Mínimo 8 caracteres" : "Tu contraseña"}
                         className="auth-input"
                         value={form.password}
@@ -607,6 +610,7 @@ export function AuthScreen({
                         name="confirm"
                         type={showConfirm ? "text" : "password"}
                         autoComplete="new-password"
+                        maxLength={256}
                         placeholder="Repite la contraseña"
                         className="auth-input"
                         value={form.confirm}
@@ -647,7 +651,7 @@ export function AuthScreen({
                       <span>
                         Acepto los{" "}
                         <a
-                          href="/terms-en.html"
+                          href="/terminos.html"
                           target="_blank"
                           rel="noreferrer"
                           className="auth-link"
@@ -656,7 +660,7 @@ export function AuthScreen({
                         </a>{" "}
                         y la{" "}
                         <a
-                          href="/privacy-en.html"
+                          href="/privacidad.html"
                           target="_blank"
                           rel="noreferrer"
                           className="auth-link"

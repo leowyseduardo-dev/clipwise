@@ -126,6 +126,25 @@ export function AccountGate({ children }: { children: ReactNode }) {
     }
   }
 
+  async function adminResetLink(email: string): Promise<string> {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await sendJson<{ url: string }>(
+        "/api/admin/reset-link?email=" + encodeURIComponent(email),
+        "POST",
+      );
+      return data.url;
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "No se pudo generar el enlace.",
+      );
+      throw caught;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function logout() {
     await act(() => sendJson("/api/account/logout", "POST"));
     setPanelOpen(false);
@@ -163,17 +182,23 @@ export function AccountGate({ children }: { children: ReactNode }) {
 
   if (!a.hosted) return <>{children}</>;
 
+  const resetLink =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("reset");
+
+  // A reset link must work even when another tab is already signed in.
+  if (resetLink) {
+    return <AuthScreen onAuthenticated={refresh} />;
+  }
+
   if (!a.signed_in) {
-    const resetLink =
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).has("reset");
-    if (!authMode && !resetLink) {
+    if (!authMode) {
       return <MarketingPage onStart={setAuthMode} />;
     }
     return (
       <AuthScreen
-        initialMode={authMode ?? "login"}
-        onBack={resetLink ? undefined : () => setAuthMode(null)}
+        initialMode={authMode}
+        onBack={() => setAuthMode(null)}
         onAuthenticated={refresh}
       />
     );
@@ -230,6 +255,7 @@ export function AccountGate({ children }: { children: ReactNode }) {
               await loadAdmin();
             })
           }
+          onResetLink={adminResetLink}
         />
       )}
     </Context.Provider>

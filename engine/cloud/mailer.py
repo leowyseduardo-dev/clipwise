@@ -1,8 +1,9 @@
 """Optional SMTP delivery for password resets.
 
-The cloud server stays fully functional without SMTP: when no host is
-configured the reset link is written to the server log so an operator can
-deliver it manually. Configure CLIPWISE_SMTP_* to send real email.
+The cloud server stays functional without SMTP, but /api/account/forgot
+returns 503 until CLIPWISE_SMTP_* is configured. An admin can generate a
+one-use reset link from the Admin tab instead. Set CLIPWISE_DEV_RESET=1
+only on a local development machine to write reset links to the log.
 """
 
 from __future__ import annotations
@@ -22,7 +23,13 @@ def configured() -> bool:
 
 def send_reset(to: str, link: str) -> bool:
     if not configured():
-        log.warning("Password reset link for %s: %s", to, link)
+        if os.getenv("CLIPWISE_DEV_RESET", "").strip() == "1":
+            log.warning("Password reset link for %s: %s", to, link)
+        else:
+            log.warning(
+                "Password reset requested for %s but CLIPWISE_SMTP_HOST is not configured.",
+                to,
+            )
         return False
 
     host = os.environ["CLIPWISE_SMTP_HOST"].strip()

@@ -713,8 +713,8 @@ export function NewJobCard({
         )}
 
         <p className="text-center text-[10px] leading-relaxed text-veru-paper/30">
-          Procesado local con Whisper + FFmpeg · Sin marcas de agua · Clips
-          verticales 1080×1920
+          Procesado en Clipwise con Whisper + FFmpeg · Sin marca de agua forzada ·
+          Clips verticales 1080×1920
         </p>
       </div>
     </form>

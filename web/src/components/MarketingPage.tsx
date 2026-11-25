@@ -101,7 +101,7 @@ const PLANS = [
       "2 clips al día",
       "20 clips al mes",
       "1 proyecto a la vez",
-      "720p con marca de agua",
+      "1080p sin marca de agua forzada",
       "Todos los estilos de subtítulos",
     ],
     cta: "Empezar gratis",
@@ -114,7 +114,7 @@ const PLANS = [
     tagline: "Para publicar cada semana",
     features: [
       "120 clips al mes",
-      "1080p sin marca de agua",
+      "1080p sin marca de agua forzada",
       "3 proyectos a la vez",
       "2 plazas de equipo",
       "Calendario y editor completos",
@@ -129,10 +129,10 @@ const PLANS = [
     tagline: "Para producir a escala",
     features: [
       "400 clips al mes",
-      "Máxima prioridad de render",
       "8 proyectos a la vez",
       "5 plazas de equipo",
       "Todo lo de Creator, sin límites de estilo",
+      "1080p sin marca de agua forzada",
     ],
     cta: "Elegir Studio",
     highlight: false,
@@ -155,7 +155,7 @@ const FAQ = [
   },
   {
     q: "¿Los clips llevan marca de agua?",
-    a: "Solo en Starter. Creator y Studio exportan limpio, en 1080p, listo para subir a TikTok, Reels o Shorts.",
+    a: "No. Todos los planes exportan en 1080p sin marca de agua forzada, listo para subir a TikTok, Reels o Shorts. Los planes pagados añaden más clips, proyectos simultáneos y plazas de equipo.",
   },
   {
     q: "¿Puedo cambiar o cancelar mi plan?",
@@ -716,8 +716,8 @@ export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }
                 Legal
               </p>
               <ul className="mt-3 space-y-2 text-[11px] font-medium text-slate-500">
-                <li><a href="/terms-en.html" className="transition hover:text-slate-900">Términos</a></li>
-                <li><a href="/privacy-en.html" className="transition hover:text-slate-900">Privacidad</a></li>
+                <li><a href="/terminos.html" className="transition hover:text-slate-900">Términos</a></li>
+                <li><a href="/privacidad.html" className="transition hover:text-slate-900">Privacidad</a></li>
                 <li><a href="mailto:support@clipwise.app" className="transition hover:text-slate-900">Contacto</a></li>
               </ul>
             </div>

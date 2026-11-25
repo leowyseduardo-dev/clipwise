@@ -10,11 +10,13 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 
 ## 3. Implemented features
 - Link-based clipping restored as the default flow: paste a YouTube, Kick or Twitch video/VOD link and the engine downloads it, detects highlights, cuts, reframes and subtitles the clips automatically. Direct upload remains available as a secondary tab.
-- Three subscription plans: Starter (free), Creator ($5/mo, recommended), Studio ($10/mo).
+- Three subscription plans: Starter (free), Creator ($5/mo, recommended), Studio ($10/mo). All plans export 1080p without a forced watermark; paid plans differ by clip quota, simultaneous projects and team seats.
 - Daily limit (2 clips/day) for Starter plus monthly limits.
 - Admin overview endpoint and admin panel in the account view, including admin plan overrides. A manual plan change marks the team subscription as `MANUAL` so reconciliation never downgrades it.
-- Commercial landing page with hero, how-it-works, features, pricing, FAQ, footer.
-- SEO meta tags, responsive layout.
+- Public landing page before authentication, with hero, how-it-works, features, pricing, FAQ and footer.
+- Spanish legal pages at `/terminos.html` and `/privacidad.html`; legacy `/terms-en.html` and `/privacy-en.html` redirect to them.
+- Admin-generated password reset links (`POST /api/admin/reset-link`) for the no-SMTP deployment; the browser reset form accepts the link even when another session is active.
+- SEO meta tags and responsive layout.
 
 ## 4. Authentication system
 - Existing hosted auth (FastAPI + argon2 + SQLite sessions, HTTP-only cookies) retained and extended with admin flag.
@@ -24,10 +26,11 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - Daily usage derived from charges.created timestamps.
 
 ## 6. Plans system
-- Starter: free, 20 clips/month, 2/day, 1 project, 1 seat, 720p + watermark.
-- Creator: $5/month, 120 clips/month, 3 projects, 2 seats, 1080p, no watermark. Recommended tier.
-- Studio: $10/month, 400 clips/month, 8 projects, 5 seats, max render priority.
-- Legacy teams stored as "Free" are migrated to "Starter" on startup.
+- Starter: free, 20 clips/month, 2/day, 1 project, 1 seat, 1080p without a forced watermark.
+- Creator: $5/month, 120 clips/month, 3 projects, 2 seats, 1080p without a forced watermark. Recommended tier.
+- Studio: $10/month, 400 clips/month, 8 projects, 5 seats, 1080p without a forced watermark.
+- Plan names are normalised through `VALID_PLANS` / `normalize_plan()`; legacy teams stored as "Free" are migrated to "Starter" on startup and at every account read.
+- Registration inserts `Starter` explicitly and no longer raises `KeyError` for the old `Free` value.
 
 ## 7. Payments integration
 - Automatic PayPal Subscriptions. The plan tab renders the official PayPal JS SDK button (`vault=true&intent=subscription&currency=USD`); `createSubscription` sends the catalog `plan_id` plus the authenticated team as `custom_id`.
@@ -55,7 +58,7 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 
 ## 9. Tests and packaging
 - Engine test suite: 306 passed.
-- Web build: tsc + vite successful; main bundle 237.68 kB (gzip 61.48 kB), Virocut engine lazy chunk 598.11 kB (gzip 155.76 kB), CSS 78.99 kB (gzip 14.06 kB).
+- Web build after the final audit: `npm run build` (tsc + vite) successful; main bundle 240.86 kB (gzip 62.10 kB), Virocut engine lazy chunk 598.11 kB (gzip 155.76 kB), CSS 79.11 kB (gzip 14.08 kB). The Vite size warning is the expected 598 kB Virocut engine chunk.
 - PayPal live credentials verified against `https://api-m.paypal.com` (sandbox returns `401 invalid_client`). Live product and both monthly plans created through the API.
 - `/api/public/config` returns `configured: true`, the live client ID and plan IDs `P-9JK...` / `P-73R...`. `POST /api/admin/paypal/setup` returns the same catalog.
 - Activation guard verified: a fake subscription ID is rejected by PayPal with HTTP 502 (`Request is not well-formed...`), so the plan cannot be activated without a real PayPal subscription.
@@ -68,6 +71,15 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - Launcher failover verified: killed the uvicorn process, the detached launcher started a new one within 10 s, and the public root returned `200` again.
 - Account plan tab verified in headless Chrome: the PayPal JS SDK loads with the live client ID, three PayPal button iframes render for Creator, the copy says "Pago automático con PayPal", and no `paypal.me` or manual-activation text remains.
 - Virocut editor verified end to end in headless Chrome: edited a 30 s source, rendered and saved a 12.011 s clip at 1080×1920, 30 fps, H.264 + AAC (48 kHz stereo), 6,009,144 bytes; the clip API reports `browser_engine: true` and the download link serves the same file.
+- Final public-browser audit (2026-11-25):
+  - Registration form rejects submission without accepting the terms, then creates a `Starter` account and logs in. Login, logout and the account drawer were exercised in the same browser.
+  - Admin reset-link form generated a valid `?reset=` URL; the reset form appeared even with an admin session active, accepted a new password, and the new password logged in successfully.
+  - Forgot-password without SMTP returns the honest `503` copy: recovery by email is not configured and points to support.
+  - Plan tab: Starter, Creator and Studio cards match the plan matrix; the manual Studio plan now offers the live PayPal subscription button instead of a dead “suscríbete desde aquí” sentence. The Starter card no longer tells a manual-plan account to cancel a subscription it does not have. Creator/Studio PayPal iframe buttons render from the official SDK.
+  - Landing: `/terminos.html` and `/privacidad.html` links resolve; `/terms-en.html` redirects to `/terminos.html`; copy says 1080p without a forced watermark and no longer claims 720p, watermarks or “máxima prioridad”.
+  - Job/editor: uploaded a 240,724-byte MP4 through the browser, processed job `0042be74001d439987a2180a4f67bdc4`, opened clip `0042be74008df520c63857` in the Virocut editor, rendered 1080×1920 H.264+AAC in the browser, and saved it back to the clip with `browser_engine: true`. No console errors.
+  - Test accounts and workspaces were removed; the database now contains only `Leowysgarcia@gmail.com` (Studio, owner) and `leowyseduardo@gmail.com` (Starter).
+- Fixed during the audit: `Free`→`Starter` registration `KeyError`; reset-token logging (now gated by `CLIPWISE_DEV_RESET=1`); manual-paid-plan PayPal conversion; false “procesado local / en tu equipo / sin subir audio” copy; false 720p/watermark/max-priority plan copy; cancellation copy for manual plans; file sizes below 1 MB now display as KB.
 - Link job creation verified through the cloud proxy: the URL is validated, a job is queued and the engine starts the remote download. Live YouTube/Kick/Twitch downloads depend on the host's DNS and platform access.
 - Desktop installer rebuilt after the PayPal/admin UI and verified end to end:
   - Installer: `desktop/dist/installer/Clipwise-Setup-1.3.0.exe`
@@ -82,11 +94,15 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 ## 10. Pending issues
 - Public HTTPS and the Clipwise webhook are live through Tailscale Funnel; the webhook ID is stored in `paypal_catalog.json`. The remaining hosting gap is that the PC must stay powered on and signed in: the Startup shortcut runs at logon, not before, and Tailscale Funnel has no SLA. For boot-level startup without a login, register an elevated Scheduled Task or move to the VPS in section 11.
 - A real $5/$10 PayPal checkout has not been completed because it needs a buyer PayPal account. The live catalog and SDK are verified; the first real purchase must be watched end to end.
-- Failed-job credit reconciliation beyond immediate request failure not fully automated.
-- Full i18n (ES/EN) selector not implemented; landing and app copy are Spanish-first.
-- Watermark enforcement and export resolution are not yet gated by plan in the render pipeline.
-- Legal trademark/domain verification pending.
+- Without SMTP, automatic password recovery is unavailable; the admin reset-link button is the current workaround. Set the SMTP variables to enable the normal email flow.
+- The accounts database lives under `%LOCALAPPDATA%\Temp\opencode\cloudtest`; a Temp cleanup would erase accounts and workspaces. Move it to a permanent data directory before treating the service as production.
+- Failed-job credit reconciliation beyond immediate request failure is not fully automated.
+- Full i18n (ES/EN) selector is not implemented; landing and app copy are Spanish-first.
+- Legal trademark/domain verification is pending.
 - `PAYPAL_ME_URL` remains in legacy config but is not used by the UI; remove it once old deployments are migrated.
+- The legacy `POST /api/account/billing/{plan}` endpoint still returns `409` when `PAYPAL_ME_URL` is set. The UI no longer calls it; remove the route or the variable in a future cleanup.
+- The live PayPal catalog keeps the old plan description (“máxima prioridad”) in PayPal metadata because descriptions are written at plan creation. The application copy is already corrected; recreate the catalog only if the PayPal-side description must change.
+- The PayPal SDK can leave the subscribe button in a loading state if `createSubscription` never resolves; a page reload recovers. Check the browser console and network tab if a buyer reports it.
 
 ## 11. Deployment 24/7 (gratis)
 - GitHub repository: `https://github.com/leowyseduardo-dev/clipwise`.

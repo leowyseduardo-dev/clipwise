@@ -13,7 +13,7 @@ import {
 } from "./icons";
 
 const PIPELINE = [
-  { n: "01", title: "Transcribe", body: "Whisper local, palabra a palabra." },
+  { n: "01", title: "Transcribe", body: "Whisper en Clipwise, palabra a palabra." },
   { n: "02", title: "Analiza", body: "Escenas, audio, risas y tensión." },
   { n: "03", title: "Puntúa", body: "Momentos de 1 a 100 con contexto." },
   { n: "04", title: "Reencuadra", body: "9:16, cámaras y juego en su sitio." },
@@ -53,12 +53,12 @@ export function AIPanel({
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-veru-paper/55">
             Clipwise escucha el directo, encuentra lo que merece cortarse,
             reencuadra a vertical y quema los subtítulos. Todo corre en tu
-            máquina; el LLM solo entra si tú lo conectas.
+            espacio de trabajo; el LLM solo entra si tú lo conectas.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-2">
             <span className="chip border-veru-ember/25 bg-veru-ember/10 text-veru-blush">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Procesado local
+              Procesado en Clipwise
             </span>
             <span className="chip">{model}</span>
             <span className="chip">
@@ -81,7 +81,7 @@ export function AIPanel({
           kicker="Transcripción"
           title="Cada palabra, con su tiempo"
           body={`${model} convierte la voz en subtítulos sincronizados. Detecta el idioma o fíjalo en español, inglés, portugués y más.`}
-          points={["Whisper local", "Timestamps por palabra", "Sin subir el audio"]}
+          points={["Whisper en Clipwise", "Timestamps por palabra", "Audio en tu espacio de trabajo"]}
         />
         <CapabilityCard
           icon={<IconScissors size={18} />}
@@ -90,7 +90,7 @@ export function AIPanel({
           body={
             llm
               ? "El LLM lee la transcripción y puntúa gancho, tensión, humor y retención. Tú solo eliges cuántos clips quieres."
-              : "El motor puntúa gancho, claridad, intensidad, sorpresa y retención sin salir de tu equipo. Conecta un LLM para afinar la selección."
+              : "El motor puntúa gancho, claridad, intensidad, sorpresa y retención sin salir de Clipwise. Conecta un LLM para afinar la selección."
           }
           points={["Score de 1 a 100", "Categorías y contexto", "5–15 clips por video"]}
         />
@@ -120,7 +120,7 @@ export function AIPanel({
           kicker="Publicación"
           title="Del render al feed"
           body="Descarga el MP4 1080×1920, el SRT y los textos, o publica directo en YouTube y TikTok con las cuentas que conectes."
-          points={["YouTube + TikTok", "Textos por plataforma", "Sin marca de agua"]}
+          points={["YouTube + TikTok", "Textos por plataforma", "Sin marca de agua forzada"]}
           extra={
             <div className="flex items-center gap-2 text-veru-paper/35">
               <IconYouTube size={14} />

@@ -6,7 +6,9 @@ import {
   IconAlert,
   IconBolt,
   IconCheck,
+  IconCopy,
   IconFilm,
+  IconLink,
   IconLoader,
   IconMail,
   IconSettings,
@@ -78,14 +80,14 @@ const PLAN_META: Record<
   Starter: {
     price: 0,
     tagline: "Para probar el flujo completo",
-    features: ["2 clips al día", "20 clips al mes", "1 proyecto a la vez", "720p con marca de agua"],
+    features: ["2 clips al día", "20 clips al mes", "1 proyecto a la vez", "1080p sin marca de agua forzada"],
   },
   Creator: {
     price: 5,
     tagline: "El más recomendado",
     features: [
       "120 clips al mes",
-      "1080p sin marca de agua",
+      "1080p sin marca de agua forzada",
       "3 proyectos a la vez",
       "2 plazas de equipo",
     ],
@@ -96,9 +98,9 @@ const PLAN_META: Record<
     tagline: "Para producir a escala",
     features: [
       "400 clips al mes",
-      "Máxima prioridad de render",
       "8 proyectos a la vez",
       "5 plazas de equipo",
+      "1080p sin marca de agua forzada",
     ],
   },
 };
@@ -142,6 +144,7 @@ export function AccountPanel({
   onRemoveMember,
   onSwitchTeam,
   onSuspend,
+  onResetLink,
 }: {
   account: Account;
   adminData: AdminOverview | null;
@@ -158,11 +161,15 @@ export function AccountPanel({
   onRemoveMember: (email: string) => Promise<void>;
   onSwitchTeam: (teamId: string) => Promise<void>;
   onSuspend: (email: string) => Promise<void>;
+  onResetLink: (email: string) => Promise<string>;
 }) {
   const [tab, setTab] = useState<Tab>("resumen");
   const [member, setMember] = useState("");
   const [memberRole, setMemberRole] = useState("editor");
   const [suspendEmail, setSuspendEmail] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetUrl, setResetUrl] = useState("");
+  const [resetCopied, setResetCopied] = useState(false);
   const [planDrafts, setPlanDrafts] = useState<Record<string, string>>({});
   const [paypalError, setPaypalError] = useState("");
 
@@ -205,6 +212,30 @@ export function AccountPanel({
     if (!email) return;
     if (!window.confirm(`¿Cerrar todas las sesiones de ${email}?`)) return;
     void onSuspend(email).then(() => setSuspendEmail(""));
+  }
+
+  async function submitReset(event: FormEvent) {
+    event.preventDefault();
+    const email = resetEmail.trim();
+    if (!email) return;
+    setResetUrl("");
+    setResetCopied(false);
+    try {
+      setResetUrl(await onResetLink(email));
+    } catch {
+      // The gate surfaces the error at the top of the panel.
+    }
+  }
+
+  async function copyReset() {
+    if (!resetUrl) return;
+    try {
+      await navigator.clipboard.writeText(resetUrl);
+      setResetCopied(true);
+      window.setTimeout(() => setResetCopied(false), 2500);
+    } catch {
+      setResetCopied(false);
+    }
   }
 
   return (
@@ -668,23 +699,52 @@ export function AccountPanel({
                               </div>
                             )}
                             {paidPlan && !subscription && (
-                              <p className="text-[9px] leading-relaxed text-slate-400">
-                                Este plan se activó manualmente. Para gestionarlo
-                                automáticamente, suscríbete desde aquí.
-                              </p>
+                              canSubscribe ? (
+                                <div>
+                                  <p className="mb-1.5 text-[9px] leading-relaxed text-slate-400">
+                                    Plan manual. Activa la suscripción automática para
+                                    renovarlo solo.
+                                  </p>
+                                  <PayPalSubscribeButton
+                                    clientId={paypal?.client_id ?? ""}
+                                    mode={paypal?.mode === "sandbox" ? "sandbox" : "live"}
+                                    planId={planId}
+                                    planName={name}
+                                    teamId={account.team ?? ""}
+                                    disabled={busy}
+                                    onActivated={async (id) => {
+                                      setPaypalError("");
+                                      await onActivatePaypal(id);
+                                    }}
+                                    onError={setPaypalError}
+                                  />
+                                </div>
+                              ) : (
+                                <p className="text-[9px] leading-relaxed text-slate-400">
+                                  {!canManage
+                                    ? "Solo el propietario puede gestionar la suscripción."
+                                    : "Este plan se activó manualmente. La suscripción automática no está disponible ahora mismo."}
+                                </p>
+                              )
                             )}
                           </div>
                         ) : name === "Starter" ? (
                           <p className="mt-2 text-[9px] leading-relaxed text-slate-400">
                             {plan !== "Starter"
-                              ? "Cancela tu suscripción para volver a Starter."
+                              ? subscriptionActive
+                                ? "Cancela tu suscripción para volver a Starter."
+                                : subscriptionCancelled
+                                  ? "Tu suscripción está cancelada; volverás a Starter al final del periodo."
+                                  : subscriptionManual || !subscription
+                                    ? "Tu plan actual es manual. Para volver a Starter, pide el cambio en el panel de administración."
+                                    : "Tu plan volverá a Starter cuando termine la suscripción."
                               : "Plan gratuito activo."}
                           </p>
                         ) : canSubscribe ? (
                           <div className="mt-2 space-y-2">
                             {plan !== "Starter" && (
                               <p className="text-[9px] leading-relaxed text-amber-600">
-                                Al activar {name}, cancelaremos tu suscripción actual.
+                                Al activar {name}, se reemplazará tu plan actual.
                               </p>
                             )}
                             <PayPalSubscribeButton
@@ -720,8 +780,8 @@ export function AccountPanel({
                 <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-[10px] leading-relaxed text-emerald-700">
                   <IconCheck size={13} className="mt-0.5 shrink-0" />
                   Pago automático con PayPal. Al confirmar la suscripción, el plan se
-                  activa al instante, sin solicitudes ni esperas. Puedes cancelar desde
-                  esta pantalla.
+                  activa al instante, sin solicitudes ni esperas. Las suscripciones
+                  automáticas se cancelan desde esta pantalla.
                 </p>
               ) : (
                 <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[10px] leading-relaxed text-amber-700">
@@ -858,6 +918,63 @@ export function AccountPanel({
                   )}
                 </div>
               </section>
+
+              <form
+                onSubmit={submitReset}
+                className="space-y-2.5 rounded-2xl border border-blue-200 bg-blue-50/40 p-4"
+              >
+                <p className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-blue-700">
+                  <IconLink size={14} />
+                  Generar enlace de recuperación
+                </p>
+                <p className="text-[10px] leading-relaxed text-blue-700/80">
+                  Enlace de un solo uso, válido 30 minutos. Envíalo al usuario por el
+                  canal que prefieras; no se registra en los logs.
+                </p>
+                <input
+                  className="field"
+                  type="email"
+                  placeholder="correo@ejemplo.com"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  aria-label="Correo de la cuenta para el enlace de recuperación"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                  disabled={busy || !resetEmail.trim()}
+                >
+                  {busy ? (
+                    <IconLoader size={14} className="animate-spin" />
+                  ) : (
+                    "Generar enlace"
+                  )}
+                </button>
+                {resetUrl && (
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-blue-700/70">
+                      Enlace generado
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        className="field flex-1 text-[10px]"
+                        readOnly
+                        value={resetUrl}
+                        onFocus={(event) => event.currentTarget.select()}
+                        aria-label="Enlace de recuperación generado"
+                      />
+                      <button
+                        type="button"
+                        className="button-ghost shrink-0 px-3 py-1.5 text-[10px]"
+                        onClick={() => void copyReset()}
+                      >
+                        {resetCopied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                        {resetCopied ? "Copiado" : "Copiar"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </form>
 
               <form
                 onSubmit={submitSuspend}

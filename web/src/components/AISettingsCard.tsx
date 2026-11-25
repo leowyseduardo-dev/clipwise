@@ -39,7 +39,7 @@ export function AISettingsCard({ onChanged }: { onChanged: (enabled: boolean) =>
         const result = await testAIConnection();
         if (result.ok) setNotice(result.message); else setError(result.message);
         setConfig(await getAISettings());
-      } else setNotice(clearKey ? "Clave eliminada. Se usará el análisis local." : "Configuración guardada para los próximos análisis.");
+      } else setNotice(clearKey ? "Clave eliminada. Se usará el análisis heurístico." : "Configuración guardada para los próximos análisis.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
     } finally { setBusy(false); }
@@ -50,7 +50,7 @@ export function AISettingsCard({ onChanged }: { onChanged: (enabled: boolean) =>
       <h2 className="mt-1 text-2xl font-semibold tracking-tight">Conecta tu IA</h2>
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-veru-paper/60">
         El modelo lee fragmentos de la transcripción, evalúa el gancho y el desenlace y revisa los textos del clip.
-        El video y el audio se procesan en tu equipo. Si la API falla o agota su cuota, el análisis local continúa.
+        El video y el audio se procesan en el servidor de Clipwise. Si la API falla o agota su cuota, el análisis heurístico continúa.
       </p>
       <fieldset disabled={busy || !config} className="mt-5 space-y-4 disabled:opacity-60">
         <label className="block"><span className="label-xs">Proveedor</span>
@@ -74,7 +74,7 @@ export function AISettingsCard({ onChanged }: { onChanged: (enabled: boolean) =>
         {preset?.key_url && <a href={preset.key_url} target="_blank" rel="noreferrer" className="inline-block text-sm text-veru-blush underline underline-offset-4">
           {provider === "ollama" ? "Obtener Ollama" : "Crear mi clave en la web oficial"} ↗
         </a>}
-        {provider === "ollama" && <p className="text-xs text-veru-paper/55">Instala Ollama y descarga el modelo elegido antes de probar la conexión. Clipwise conecta con el servidor local en el puerto 11434.</p>}
+        {provider === "ollama" && <p className="text-xs text-veru-paper/55">Instala Ollama y descarga el modelo elegido antes de probar la conexión. Clipwise conecta con el servidor de Ollama configurado en el puerto 11434.</p>}
         <div className="flex flex-wrap gap-3">
           <button type="button" className="button-primary" onClick={() => void save(true)}>{busy ? "Comprobando…" : "Guardar y probar"}</button>
           <button type="button" className="button-secondary" onClick={() => void save(false)}>Guardar configuración</button>

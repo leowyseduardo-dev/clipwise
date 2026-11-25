@@ -22,6 +22,15 @@ def cloud(monkeypatch, tmp_path):
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRET",
         "PAYPAL_ME_URL",
+        "PAYPAL_CLIENT_ID",
+        "PAYPAL_CLIENT_SECRET",
+        "PAYPAL_MODE",
+        "PAYPAL_PRODUCT_ID",
+        "PAYPAL_CREATOR_PLAN_ID",
+        "PAYPAL_STUDIO_PLAN_ID",
+        "PAYPAL_PUBLIC_URL",
+        "PAYPAL_WEBHOOK_ID",
+        "PAYPAL_WEBHOOK_INSECURE",
         "ADMIN_EMAILS",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -32,7 +41,11 @@ def cloud(monkeypatch, tmp_path):
 def register(c, email):
     return c.post(
         "/api/account/register",
-        json={"email": email, "password": "a-unique-test-password"},
+        json={
+            "email": email,
+            "password": "a-unique-test-password",
+            "accept_terms": True,
+        },
     )
 
 
@@ -148,8 +161,14 @@ def test_signed_subscription_reconciliation_and_cancellation(cloud, monkeypatch)
 
 def test_public_config_and_manual_paypal(cloud, monkeypatch):
     monkeypatch.setenv("PAYPAL_ME_URL", "https://paypal.me/clipwise")
-    assert cloud.get("/api/public/config").json() == {
-        "paypal_me": "https://paypal.me/clipwise"
+    config = cloud.get("/api/public/config").json()
+    assert config["paypal_me"] == "https://paypal.me/clipwise"
+    assert config["paypal"] == {
+        "configured": False,
+        "client_id": "",
+        "mode": "live",
+        "currency": "USD",
+        "plans": {"Creator": "", "Studio": ""},
     }
     register(cloud, "manual@example.test")
     account = cloud.get("/api/account").json()

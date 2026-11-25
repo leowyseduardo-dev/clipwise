@@ -125,6 +125,10 @@ class Reset(BaseModel):
 
 @app.post("/api/account/register")
 def register(payload: Register, request: Request):
+    if not payload.accept_terms:
+        raise HTTPException(
+            400, "Debes aceptar los términos y la política de privacidad."
+        )
     return sign_in("register", payload, request, payload.name)
 
 
@@ -138,9 +142,23 @@ def forgot(payload: Forgot, request: Request):
     ip = request.client.host if request.client else "unknown"
     accounts.rate_limit("ip:" + ip, 40)
     accounts.rate_limit("forgot:" + payload.email.strip().lower(), 5)
+    dev_reset = os.getenv("CLIPWISE_DEV_RESET", "").strip() == "1"
+    if not mailer.configured() and not dev_reset:
+        raise HTTPException(
+            503,
+            "La recuperación por correo no está configurada. Escribe a "
+            "support@clipwise.app para recibir un enlace.",
+        )
     token = accounts.request_reset(payload.email)
     if token:
-        mailer.send_reset(payload.email.strip().lower(), origin() + "/?reset=" + token)
+        sent = mailer.send_reset(payload.email.strip().lower(), origin() + "/?reset=" + token)
+        if not sent and not dev_reset:
+            accounts.drop_reset(token)
+            raise HTTPException(
+                503,
+                "No se pudo enviar el correo de recuperación. Inténtalo más tarde "
+                "o escribe a support@clipwise.app.",
+            )
     return {"ok": True}
 
 
@@ -222,7 +240,7 @@ def info(request: Request):
         "role": i["role"],
         "plan": i["plan"],
         "used": used,
-        "limit": accounts.PLANS[i["plan"]][0],
+        "limit": accounts.PLANS[accounts.normalize_plan(i["plan"])][0],
         "teams": teams,
         "members": members,
         "plans": accounts.PLANS,
@@ -267,7 +285,7 @@ def member(payload: Member, request: Request):
         count = conn.execute(
             "SELECT COUNT(*) FROM members WHERE team_id=?", (i["team"],)
         ).fetchone()[0]
-        if not exists and count >= accounts.PLANS[i["plan"]][1]:
+        if not exists and count >= accounts.PLANS[accounts.normalize_plan(i["plan"])][1]:
             raise HTTPException(
                 403, "El equipo alcanzó el límite de miembros de su plan."
             )
@@ -454,6 +472,15 @@ def admin_suspend(email: str, request: Request):
             (email.strip().lower(),),
         )
     return {"ok": True}
+
+
+@app.post("/api/admin/reset-link")
+def admin_reset_link(email: str, request: Request):
+    _admin(request)
+    token = accounts.request_reset(email)
+    if not token:
+        raise HTTPException(404, "Cuenta no encontrada.")
+    return {"url": origin() + "/?reset=" + token}
 
 
 ID = r"[0-9a-f]{12,64}"

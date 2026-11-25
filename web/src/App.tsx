@@ -481,8 +481,8 @@ export default function App() {
                   Clipwise<span className="text-veru-ember">.</span>
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-veru-paper/35">
-                  FFmpeg · Whisper · PySceneDetect · OpenCV. Procesado local.
-                  Si activas un LLM, solo se envían fragmentos de la
+                  FFmpeg · Whisper · PySceneDetect · OpenCV. Procesado en
+                  Clipwise. Si activas un LLM, solo se envían fragmentos de la
                   transcripción para puntuar los momentos.
                 </p>
               </div>

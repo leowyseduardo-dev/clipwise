@@ -24,8 +24,8 @@ from . import accounts
 PLAN_PRICES = {"Creator": "5.00", "Studio": "10.00"}
 PLAN_TITLES = {"Creator": "Clipwise Creator", "Studio": "Clipwise Studio"}
 PLAN_DESCRIPTIONS = {
-    "Creator": "120 clips al mes, 1080p sin marca de agua, 3 proyectos simultaneos, 2 plazas de equipo.",
-    "Studio": "400 clips al mes, maxima prioridad de render, 8 proyectos simultaneos, 5 plazas de equipo.",
+    "Creator": "120 clips al mes, 1080p sin marca de agua forzada, 3 proyectos simultaneos, 2 plazas de equipo.",
+    "Studio": "400 clips al mes, 1080p sin marca de agua forzada, 8 proyectos simultaneos, 5 plazas de equipo.",
 }
 WEBHOOK_EVENTS = [
     "BILLING.SUBSCRIPTION.ACTIVATED",

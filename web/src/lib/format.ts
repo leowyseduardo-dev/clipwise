@@ -109,9 +109,12 @@ export function formatLanguage(code: string | null | undefined): string {
 }
 
 export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   const mb = bytes / (1024 * 1024);
   if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+  if (mb < 10) return `${mb.toFixed(1)} MB`;
   return `${mb.toFixed(0)} MB`;
 }
 

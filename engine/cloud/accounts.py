@@ -19,7 +19,13 @@ PLANS = {
     "Creator": (120, 2, 3),
     "Studio": (400, 5, 8),
 }
+VALID_PLANS = tuple(PLANS)
 FREE_DAILY_CLIPS = 2
+
+
+def normalize_plan(name: str | None) -> str:
+    """Old databases defaulted new teams to 'Free'; map anything stale to Starter."""
+    return name if name in PLANS else "Starter"
 ph = PasswordHasher()
 dummy = ph.hash(secrets.token_urlsafe(32))
 SCHEMA = """
@@ -66,7 +72,7 @@ def init():
         if "name" not in columns:
             conn.execute("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT ''")
         # Legacy databases used "Free"; the public tier is now called Starter.
-        conn.execute("UPDATE teams SET plan='Starter' WHERE plan='Free'")
+        conn.execute("UPDATE teams SET plan='Starter' WHERE plan NOT IN (?,?,?)", VALID_PLANS)
 
 
 def digest(s):
@@ -103,7 +109,7 @@ def account(email, password, register, name=""):
             except sqlite3.IntegrityError:
                 raise HTTPException(409, "No se pudo registrar esta cuenta.")
             conn.execute(
-                "INSERT INTO teams(id,name) VALUES (?,?)",
+                "INSERT INTO teams(id,name,plan) VALUES (?,?,'Starter')",
                 (team, name or email.split("@")[0][:80]),
             )
             conn.execute("INSERT INTO members VALUES (?,?,'owner')", (uid, team))
@@ -165,6 +171,11 @@ def reset_password(token, password):
         conn.execute("DELETE FROM password_resets WHERE user_id=?", (row["user_id"],))
 
 
+def drop_reset(token):
+    with connection() as conn:
+        conn.execute("DELETE FROM password_resets WHERE token=?", (digest(token),))
+
+
 def principal(token):
     if not token:
         raise HTTPException(401, "Inicia sesión.")
@@ -178,20 +189,30 @@ def principal(token):
         ).fetchone()
     if not row:
         raise HTTPException(401, "La sesión ha caducado.")
-    if row["role"] != "owner":
+    identity = dict(row)
+    if identity["plan"] not in PLANS:
+        with connection() as conn:
+            conn.execute(
+                "UPDATE teams SET plan='Starter' WHERE id=? AND plan NOT IN (?,?,?)",
+                (identity["team"], *VALID_PLANS),
+            )
+        identity["plan"] = "Starter"
+    if identity["role"] != "owner":
         with connection() as conn:
             seats = conn.execute(
                 "SELECT user_id FROM members WHERE team_id=? ORDER BY role='owner' DESC,rowid LIMIT ?",
-                (row["team"], PLANS[row["plan"]][1]),
+                (identity["team"], PLANS[identity["plan"]][1]),
             ).fetchall()
-        if row["user"] not in {r[0] for r in seats}:
+        if identity["user"] not in {r[0] for r in seats}:
             raise HTTPException(
                 403, "El plan actual no incluye tu plaza en este equipo."
             )
-    return dict(row)
+    return identity
 
 
 def set_plan(team, plan):
+    if plan not in PLANS:
+        raise ValueError(f"Plan desconocido: {plan}")
     with connection() as conn:
         conn.execute("UPDATE teams SET plan=? WHERE id=?", (plan, team))
 
@@ -258,6 +279,11 @@ def reserve(identity, units, *, new_job=False):
         plan = conn.execute(
             "SELECT plan FROM teams WHERE id=?", (identity["team"],)
         ).fetchone()[0]
+        if plan not in PLANS:
+            plan = "Starter"
+            conn.execute(
+                "UPDATE teams SET plan='Starter' WHERE id=?", (identity["team"],)
+            )
         if plan == "Starter":
             day_start = int(datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
             used_day = conn.execute(
