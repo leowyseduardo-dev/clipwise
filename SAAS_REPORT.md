@@ -61,6 +61,7 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - Activation guard verified: a fake subscription ID is rejected by PayPal with HTTP 502 (`Request is not well-formed...`), so the plan cannot be activated without a real PayPal subscription.
 - Webhook handling verified locally: `ACTIVATED` → Creator, `CANCELLED` → Creator until `2026-12-23`, `EXPIRED` → Starter. An admin plan reset to Studio marks the subscription `MANUAL`; repeated `/api/account` reads stay Studio.
 - Public HTTPS live at `https://clipwise.tail7dfb82.ts.net` through Tailscale Funnel → `http://127.0.0.1:8000`. Verified from the public origin: landing `200`, `/api/public/config` `200`, admin login `200`, `/api/account` `200` (owner, Studio), `/api/admin/overview` `200`.
+- Public browser pass after the Tailscale cutover: landing rendered, admin session survived a server restart, Plan tab showed Starter/Creator/Studio and the live PayPal JS SDK rendered the yellow Subscribe button plus the card button.
 - PayPal webhook registered and stored as `2EJ44015Y0955270F` in `paypal_catalog.json`; the public webhook URL is `https://clipwise.tail7dfb82.ts.net/api/billing/paypal/webhook`.
 - Malformed scanner paths that Windows rejects as filenames now return `404` instead of `500` (`SafeStaticFiles` in `engine/cloud/main.py`).
 - Public host bootstrap: `%LOCALAPPDATA%\Clipwise\start-cloud.ps1` starts uvicorn with the public origin and restarts it every 5 s if it exits. A Startup-folder shortcut runs it at user logon. AC standby and hibernate timeouts are `0`.
@@ -113,7 +114,7 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
   python -m uvicorn engine.cloud.main:app --host 127.0.0.1 --port 8000
   ```
 - Funnel is persistent: `tailscale funnel status` shows the mapping; re-enable with `tailscale funnel --bg 8000` if it is ever cleared.
-- Startup: `%LOCALAPPDATA%\Clipwise\start-cloud.ps1` loops uvicorn and logs to `%LOCALAPPDATA%\Clipwise\cloud.log`; a shortcut in the user's Startup folder runs it at logon.
+- Startup: `%LOCALAPPDATA%\Clipwise\start-cloud.ps1` loops uvicorn, writing launcher events to `%LOCALAPPDATA%\Clipwise\cloud.log` and server output to `cloud.out.log` / `cloud.err.log`; a shortcut in the user's Startup folder runs it at logon.
 - Power: AC standby and hibernate timeouts are `0`; monitor timeout is unchanged.
 - Do not expose `engine/.env`; it contains `PAYPAL_CLIENT_SECRET` and is gitignored. The public config endpoint only returns the client ID and plan IDs.
 - The admin account is `Leowysgarcia@gmail.com` with plan `Studio`; the cloud DB is `%LOCALAPPDATA%\Temp\opencode\cloudtest\accounts.sqlite3`.
