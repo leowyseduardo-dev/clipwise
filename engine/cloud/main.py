@@ -571,6 +571,16 @@ async def engine(path: str, request: Request):
     )
 
 
+class SafeStaticFiles(StaticFiles):
+    """Windows rejects some URL paths as filenames; a miss is a 404, not a 500."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except OSError:
+            raise HTTPException(status_code=404)
+
+
 web = Path(__file__).resolve().parents[2] / "web" / "dist"
 if web.is_dir():
-    app.mount("/", StaticFiles(directory=web, html=True), name="web")
+    app.mount("/", SafeStaticFiles(directory=web, html=True), name="web")

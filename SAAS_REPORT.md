@@ -60,6 +60,10 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - `/api/public/config` returns `configured: true`, the live client ID and plan IDs `P-9JK...` / `P-73R...`. `POST /api/admin/paypal/setup` returns the same catalog.
 - Activation guard verified: a fake subscription ID is rejected by PayPal with HTTP 502 (`Request is not well-formed...`), so the plan cannot be activated without a real PayPal subscription.
 - Webhook handling verified locally: `ACTIVATED` → Creator, `CANCELLED` → Creator until `2026-12-23`, `EXPIRED` → Starter. An admin plan reset to Studio marks the subscription `MANUAL`; repeated `/api/account` reads stay Studio.
+- Public HTTPS live at `https://clipwise.tail7dfb82.ts.net` through Tailscale Funnel → `http://127.0.0.1:8000`. Verified from the public origin: landing `200`, `/api/public/config` `200`, admin login `200`, `/api/account` `200` (owner, Studio), `/api/admin/overview` `200`.
+- PayPal webhook registered and stored as `2EJ44015Y0955270F` in `paypal_catalog.json`; the public webhook URL is `https://clipwise.tail7dfb82.ts.net/api/billing/paypal/webhook`.
+- Malformed scanner paths that Windows rejects as filenames now return `404` instead of `500` (`SafeStaticFiles` in `engine/cloud/main.py`).
+- Public host bootstrap: `%LOCALAPPDATA%\Clipwise\start-cloud.ps1` starts uvicorn with the public origin and restarts it every 5 s if it exits. A Startup-folder shortcut runs it at user logon. AC standby and hibernate timeouts are `0`.
 - Account plan tab verified in headless Chrome: the PayPal JS SDK loads with the live client ID, three PayPal button iframes render for Creator, the copy says "Pago automático con PayPal", and no `paypal.me` or manual-activation text remains.
 - Virocut editor verified end to end in headless Chrome: edited a 30 s source, rendered and saved a 12.011 s clip at 1080×1920, 30 fps, H.264 + AAC (48 kHz stereo), 6,009,144 bytes; the clip API reports `browser_engine: true` and the download link serves the same file.
 - Link job creation verified through the cloud proxy: the URL is validated, a job is queued and the engine starts the remote download. Live YouTube/Kick/Twitch downloads depend on the host's DNS and platform access.
@@ -74,7 +78,7 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
   - The local data directory stays `%LOCALAPPDATA%\ClipForge` so existing libraries survive the rebrand.
 
 ## 10. Pending issues
-- No public HTTPS domain is configured yet, so no Clipwise webhook has been registered and `PAYPAL_WEBHOOK_ID` is empty. First activation works through `onApprove`; renewals, cancellations, suspensions and failed payments need the webhook. Set `PAYPAL_PUBLIC_URL` and call `POST /api/admin/paypal/setup` once the domain is live.
+- Public HTTPS and the Clipwise webhook are live through Tailscale Funnel; the webhook ID is stored in `paypal_catalog.json`. The remaining hosting gap is that the PC must stay powered on and signed in: the Startup shortcut runs at logon, not before, and Tailscale Funnel has no SLA. For boot-level startup without a login, register an elevated Scheduled Task or move to the VPS in section 11.
 - A real $5/$10 PayPal checkout has not been completed because it needs a buyer PayPal account. The live catalog and SDK are verified; the first real purchase must be watched end to end.
 - Failed-job credit reconciliation beyond immediate request failure not fully automated.
 - Full i18n (ES/EN) selector not implemented; landing and app copy are Spanish-first.
@@ -96,3 +100,20 @@ Selected brand: **Clipwise** (proposed alongside Cutflow and Viro). Trademark/do
 - The standalone `/browser.html` beta page remains for uploads without a Clipwise project. Limit of both browser paths: they render media already available in the browser; YouTube/Kick/Twitch link ingestion still uses the server-side FFmpeg/Whisper pipeline. The desktop app keeps that path for links.
 - Docker is not installed on the local build machine, so the image was not built here; the deployment files and the seed were verified, the image must be built on the VPS with `docker compose up -d --build`.
 - `DEPLOY-GCP.md` documents the same stack on a Google Cloud e2-micro always-free VM (1 GB RAM + swap, US regions only, 1 GB/month egress) as an alternative to Oracle. Cloud Run, Modal, Render/Koyeb and Vercel+Turso+R2 are compared in its final table; only a real VM gives 24/7 full FFmpeg/Whisper rendering for free.
+
+## 12. Current no-card public route (Tailscale Funnel)
+- Public URL: `https://clipwise.tail7dfb82.ts.net`.
+- Tailnet device: `clipwise`, Tailscale IP `100.112.33.14`, funnel `https://clipwise.tail7dfb82.ts.net` → `http://127.0.0.1:8000`.
+- Start manually:
+  ```powershell
+  $env:CLIPFORGE_CLOUD_DIR = "$env:LOCALAPPDATA\Temp\opencode\cloudtest"
+  $env:ADMIN_EMAILS = "Leowysgarcia@gmail.com"
+  $env:CLIPFORGE_PUBLIC_ORIGIN = "https://clipwise.tail7dfb82.ts.net"
+  $env:PAYPAL_PUBLIC_URL = "https://clipwise.tail7dfb82.ts.net"
+  python -m uvicorn engine.cloud.main:app --host 127.0.0.1 --port 8000
+  ```
+- Funnel is persistent: `tailscale funnel status` shows the mapping; re-enable with `tailscale funnel --bg 8000` if it is ever cleared.
+- Startup: `%LOCALAPPDATA%\Clipwise\start-cloud.ps1` loops uvicorn and logs to `%LOCALAPPDATA%\Clipwise\cloud.log`; a shortcut in the user's Startup folder runs it at logon.
+- Power: AC standby and hibernate timeouts are `0`; monitor timeout is unchanged.
+- Do not expose `engine/.env`; it contains `PAYPAL_CLIENT_SECRET` and is gitignored. The public config endpoint only returns the client ID and plan IDs.
+- The admin account is `Leowysgarcia@gmail.com` with plan `Studio`; the cloud DB is `%LOCALAPPDATA%\Temp\opencode\cloudtest\accounts.sqlite3`.
