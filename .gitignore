@@ -11,6 +11,7 @@ engine/data/
 
 web/node_modules/
 web/dist/
+web/public/downloads/*.exe
 tools/
 desktop/build/
 desktop/dist/

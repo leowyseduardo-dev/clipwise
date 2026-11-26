@@ -19,6 +19,8 @@ import {
 type AuthMode = "login" | "register";
 type PaidPlan = "Creator" | "Studio";
 
+const WINDOWS_INSTALLER = "/downloads/Clipwise-Setup-1.3.0.exe";
+
 const NAV = [
   { label: "Producto", href: "#producto" },
   { label: "Cómo funciona", href: "#como-funciona" },
@@ -166,6 +168,10 @@ const FAQ = [
     q: "¿Qué pasa con mis vídeos?",
     a: "Cada equipo tiene su propio espacio de trabajo aislado. Los archivos se usan para procesar tus clips y se pueden borrar desde la biblioteca cuando termines.",
   },
+  {
+    q: "¿Hay aplicación de Windows?",
+    a: "Sí. Descarga el instalador de Clipwise 1.3.0 para Windows 10/11 desde esta página. La app de escritorio trae el motor FFmpeg + Whisper integrado y guarda tus proyectos en local. Si prefieres no instalar nada, usa la versión web.",
+  },
 ];
 
 export function MarketingPage({
@@ -197,6 +203,14 @@ export function MarketingPage({
           </nav>
 
           <div className="flex items-center gap-2">
+            <a
+              href={WINDOWS_INSTALLER}
+              download="Clipwise-Setup-1.3.0.exe"
+              className="hidden items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 sm:inline-flex"
+            >
+              <IconDownload size={14} />
+              Descargar app
+            </a>
             <button
               type="button"
               onClick={() => onStart("login")}
@@ -261,6 +275,16 @@ export function MarketingPage({
                   Ver cómo funciona
                 </a>
               </div>
+
+              <a
+                href={WINDOWS_INSTALLER}
+                download="Clipwise-Setup-1.3.0.exe"
+                className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-blue-700 transition hover:text-blue-900 hover:underline"
+              >
+                <IconDownload size={14} />
+                Descargar Clipwise para Windows
+                <span className="font-normal text-slate-400">(.exe · v1.3.0)</span>
+              </a>
 
               <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium text-slate-400">
                 <span className="inline-flex items-center gap-1.5">
@@ -603,6 +627,67 @@ export function MarketingPage({
           </div>
         </section>
 
+        {/* Windows app */}
+        <section id="windows" className="scroll-mt-24 border-t border-slate-100 bg-white py-16">
+          <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div>
+              <p className="eyebrow">Windows</p>
+              <h2 className="mt-3 font-display text-[2rem] font-semibold leading-[1.08] tracking-[-0.04em] text-slate-900 sm:text-[2.4rem]">
+                Clipwise también vive en tu escritorio.
+              </h2>
+              <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-slate-500">
+                Instala la app de Windows y usa el mismo motor de clips sin abrir el
+                navegador. Tus proyectos se guardan en tu equipo. Si prefieres no
+                instalar nada, la versión web funciona igual desde cualquier
+                navegador.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a
+                  href={WINDOWS_INSTALLER}
+                  download="Clipwise-Setup-1.3.0.exe"
+                  className="button-primary px-5 py-3 text-[13px]"
+                >
+                  Descargar para Windows
+                  <IconDownload size={15} />
+                </a>
+                <a
+                  href="#planes"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-[13px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  Ver planes
+                </a>
+              </div>
+              <p className="mt-3 text-[11px] text-slate-400">
+                Windows 10/11 de 64 bits · instalador .exe de 331 MB · versión 1.3.0
+              </p>
+            </div>
+
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Clipwise para Windows
+                </p>
+                <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-blue-700">
+                  v1.3.0
+                </span>
+              </div>
+              <ul className="mt-4 space-y-3 text-[12px] leading-relaxed text-slate-600">
+                {[
+                  "Motor FFmpeg + Whisper incluido en el instalador",
+                  "Proyectos y preferencias guardados en local",
+                  "Mismo flujo: pega un enlace y revisa los clips",
+                  "Sin extensión de navegador ni configuración extra",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <IconCheck size={13} className="mt-0.5 shrink-0 text-emerald-500" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+
         {/* FAQ */}
         <section id="faq" className="scroll-mt-24 border-t border-slate-100 bg-slate-50/60 py-20">
           <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr]">
@@ -720,6 +805,7 @@ export function MarketingPage({
                 <li><a href="mailto:support@clipwise.app" className="transition hover:text-slate-900">Soporte</a></li>
                 <li><a href="/docs" className="transition hover:text-slate-900">Documentación</a></li>
                 <li><a href="/browser.html" className="transition hover:text-slate-900">Render en navegador (beta)</a></li>
+                <li><a href={WINDOWS_INSTALLER} download="Clipwise-Setup-1.3.0.exe" className="transition hover:text-slate-900">Descargar para Windows</a></li>
               </ul>
             </div>
 
