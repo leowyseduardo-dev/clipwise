@@ -657,9 +657,24 @@ export function MarketingPage({
                   Ver planes
                 </a>
               </div>
-              <p className="mt-3 text-[11px] text-slate-400">
-                Windows 10/11 de 64 bits · instalador .exe de 331 MB · versión 1.3.0
-              </p>
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3 text-[11px] leading-relaxed text-slate-500">
+                <p className="font-semibold text-slate-700">
+                  El navegador descarga el .exe; ábrelo para instalar.
+                </p>
+                <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+                  <li>
+                    Busca <strong>Clipwise-Setup-1.3.0.exe</strong> en Descargas y ábrelo.
+                  </li>
+                  <li>
+                    Si aparece “Windows protegió tu PC”, pulsa{" "}
+                    <strong>Más información</strong> y después{" "}
+                    <strong>Ejecutar de todos modos</strong>.
+                  </li>
+                </ol>
+                <p className="mt-1.5 text-slate-400">
+                  Windows 10/11 de 64 bits · 331 MB · versión 1.3.0
+                </p>
+              </div>
             </div>
 
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">

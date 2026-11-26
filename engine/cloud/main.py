@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from . import accounts, billing, mailer, paypal_billing, seed
@@ -595,6 +595,18 @@ async def engine(path: str, request: Request):
         body(),
         status_code=upstream.status_code,
         headers={k: v for k, v in upstream.headers.items() if k in allowed},
+    )
+
+
+@app.get("/downloads/Clipwise-Setup-1.3.0.exe", include_in_schema=False)
+def windows_installer():
+    installer = Path(__file__).resolve().parents[2] / "web" / "dist" / "downloads" / "Clipwise-Setup-1.3.0.exe"
+    if not installer.is_file():
+        raise HTTPException(404, "El instalador de Windows no está publicado.")
+    return FileResponse(
+        installer,
+        media_type="application/x-msdownload",
+        filename="Clipwise-Setup-1.3.0.exe",
     )
 
 
