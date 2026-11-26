@@ -17,6 +17,7 @@ import {
 } from "./icons";
 
 type AuthMode = "login" | "register";
+type PaidPlan = "Creator" | "Studio";
 
 const NAV = [
   { label: "Producto", href: "#producto" },
@@ -167,7 +168,11 @@ const FAQ = [
   },
 ];
 
-export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }) {
+export function MarketingPage({
+  onStart,
+}: {
+  onStart: (mode: AuthMode, plan?: PaidPlan) => void;
+}) {
   return (
     <div className="relative z-10 min-h-screen bg-white">
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
@@ -566,7 +571,14 @@ export function MarketingPage({ onStart }: { onStart: (mode: AuthMode) => void }
 
                   <button
                     type="button"
-                    onClick={() => onStart("register")}
+                    onClick={() =>
+                      onStart(
+                        "register",
+                        plan.name === "Creator" || plan.name === "Studio"
+                          ? plan.name
+                          : undefined,
+                      )
+                    }
                     className={`mt-6 w-full ${
                       plan.highlight ? "button-primary py-3" : "button-ghost py-3"
                     }`}

@@ -145,6 +145,7 @@ export function AccountPanel({
   onSwitchTeam,
   onSuspend,
   onResetLink,
+  initialTab = "resumen",
 }: {
   account: Account;
   adminData: AdminOverview | null;
@@ -162,8 +163,9 @@ export function AccountPanel({
   onSwitchTeam: (teamId: string) => Promise<void>;
   onSuspend: (email: string) => Promise<void>;
   onResetLink: (email: string) => Promise<string>;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("resumen");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [member, setMember] = useState("");
   const [memberRole, setMemberRole] = useState("editor");
   const [suspendEmail, setSuspendEmail] = useState("");

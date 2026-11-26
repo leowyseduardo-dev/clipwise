@@ -362,15 +362,38 @@ def subscription_details(subscription_id: str) -> dict:
 
 
 def _cancel_remote(subscription_id: str, reason: str) -> None:
+    """Cancel at PayPal before changing local state.
+
+    A transient PayPal/API failure must not leave a subscription billing in the
+    background while Clipwise tells the customer it is cancelled.
+    """
+    details = subscription_details(subscription_id)
+    status = str(details.get("status") or "").upper()
+    if status in {"CANCELLED", "EXPIRED"}:
+        return
     try:
         api(
             "/v1/billing/subscriptions/" + quote(subscription_id, safe="") + "/cancel",
             method="POST",
             data={"reason": reason},
         )
-    except HTTPException:
-        # PayPal may already have cancelled it. The local state is reconciled below.
-        pass
+    except HTTPException as exc:
+        # A concurrent request may have already cancelled it.
+        try:
+            details = subscription_details(subscription_id)
+        except HTTPException:
+            raise exc
+        if str(details.get("status") or "").upper() in {"CANCELLED", "EXPIRED"}:
+            return
+        raise
+
+
+def _activate_remote(subscription_id: str) -> None:
+    api(
+        "/v1/billing/subscriptions/" + quote(subscription_id, safe="") + "/activate",
+        method="POST",
+        data={},
+    )
 
 
 def activate(person: dict, subscription_id: str) -> dict:
@@ -393,7 +416,32 @@ def activate(person: dict, subscription_id: str) -> dict:
             400, "El plan de PayPal no corresponde a Clipwise."
         )
     status = str(details.get("status") or "").upper()
-    if status not in {"ACTIVE", "APPROVED"}:
+    if status == "APPROVAL_PENDING":
+        raise HTTPException(
+            409,
+            "PayPal todavia no confirmo la suscripcion. Completa el pago y "
+            "recarga esta pantalla.",
+        )
+    if status == "APPROVED":
+        # The buyer approved but PayPal has not started the billing cycle.
+        # Activate it explicitly instead of granting a paid plan without a
+        # confirmed subscription.
+        try:
+            _activate_remote(subscription_id)
+        except HTTPException as exc:
+            try:
+                details = subscription_details(subscription_id)
+            except HTTPException:
+                raise exc
+            status = str(details.get("status") or "").upper()
+            if status != "ACTIVE":
+                raise exc
+        else:
+            details = subscription_details(subscription_id)
+            status = str(details.get("status") or "").upper()
+            if status == "APPROVED":
+                status = "ACTIVE"
+    if status != "ACTIVE":
         raise HTTPException(
             409,
             "PayPal todavia no confirmo la suscripcion (estado "
@@ -452,9 +500,12 @@ def _parse_time(value) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def reconcile_team(team: str, current_plan: str) -> str:
@@ -463,7 +514,7 @@ def reconcile_team(team: str, current_plan: str) -> str:
     if not current:
         return current_plan
     status = str(current.get("status") or "").upper()
-    if status in {"ACTIVE", "APPROVED", "MANUAL"}:
+    if status in {"ACTIVE", "APPROVED", "MANUAL", "PAYMENT_FAILED"}:
         return current_plan
     if status == "CANCELLED":
         until = _parse_time(current.get("renews_at"))
@@ -516,14 +567,20 @@ def _handle_event(event: dict) -> None:
         if not plan:
             return
         status = str(resource.get("status") or "ACTIVE").upper()
+        # A webhook without a local subscription can only add access. It must
+        # never create a row that a later reconciliation uses to remove it.
+        if status not in {"ACTIVE", "APPROVED"} and not stored:
+            return
         billing = resource.get("billing_info") or {}
         renews_at = billing.get("next_billing_time") or (stored or {}).get("renews_at")
         accounts.save_subscription(subscription_id, team, plan, plan_id, status, renews_at)
         if status in {"ACTIVE", "APPROVED"}:
             accounts.set_plan(team, plan)
     elif event_type == "BILLING.SUBSCRIPTION.CANCELLED":
+        if not stored:
+            return
         billing = resource.get("billing_info") or {}
-        renews_at = billing.get("next_billing_time") or (stored or {}).get("renews_at")
+        renews_at = billing.get("next_billing_time") or stored.get("renews_at")
         accounts.update_subscription(subscription_id, "CANCELLED", renews_at)
         if not renews_at:
             accounts.set_plan(team, "Starter")
@@ -531,10 +588,14 @@ def _handle_event(event: dict) -> None:
         "BILLING.SUBSCRIPTION.EXPIRED",
         "BILLING.SUBSCRIPTION.SUSPENDED",
     }:
+        if not stored:
+            return
         status = event_type.rsplit(".", 1)[-1]
         accounts.update_subscription(subscription_id, status)
         accounts.set_plan(team, "Starter")
     elif event_type == "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+        if not stored:
+            return
         accounts.update_subscription(subscription_id, "PAYMENT_FAILED")
     elif event_type == "PAYMENT.SALE.COMPLETED":
         try:

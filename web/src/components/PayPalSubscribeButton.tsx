@@ -124,6 +124,10 @@ export function PayPalSubscribeButton({
             actions.subscription.create({
               plan_id: planId,
               custom_id: teamId,
+              application_context: {
+                shipping_preference: "NO_SHIPPING",
+                user_action: "SUBSCRIBE_NOW",
+              },
             }),
           onApprove: async (data) => {
             try {

@@ -32,6 +32,8 @@ export function AccountGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<"resumen" | "plan">("resumen");
+  const [pendingPlan, setPendingPlan] = useState<"Creator" | "Studio" | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
 
   const refresh = useCallback(async () => {
@@ -76,6 +78,14 @@ export function AccountGate({ children }: { children: ReactNode }) {
       void loadAdminTeams();
     }
   }, [a?.admin, loadAdmin, loadAdminTeams]);
+
+  useEffect(() => {
+    if (a?.signed_in && pendingPlan) {
+      setPanelTab("plan");
+      setPanelOpen(true);
+      setPendingPlan(null);
+    }
+  }, [a?.signed_in, pendingPlan]);
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -148,7 +158,19 @@ export function AccountGate({ children }: { children: ReactNode }) {
   async function logout() {
     await act(() => sendJson("/api/account/logout", "POST"));
     setPanelOpen(false);
+    setPanelTab("resumen");
+    setPendingPlan(null);
     setAuthMode(null);
+  }
+
+  function openAccount() {
+    setPanelTab("resumen");
+    setPanelOpen(true);
+  }
+
+  function startAuth(mode: "login" | "register", plan?: "Creator" | "Studio") {
+    setPendingPlan(plan ?? null);
+    setAuthMode(mode);
   }
 
   if (!a) {
@@ -193,23 +215,27 @@ export function AccountGate({ children }: { children: ReactNode }) {
 
   if (!a.signed_in) {
     if (!authMode) {
-      return <MarketingPage onStart={setAuthMode} />;
+      return <MarketingPage onStart={startAuth} />;
     }
     return (
       <AuthScreen
         initialMode={authMode}
-        onBack={() => setAuthMode(null)}
+        onBack={() => {
+          setAuthMode(null);
+          setPendingPlan(null);
+        }}
         onAuthenticated={refresh}
       />
     );
   }
 
   return (
-    <Context.Provider value={{ ...a, openAccount: () => setPanelOpen(true) }}>
+    <Context.Provider value={{ ...a, openAccount }}>
       <div key={a.team}>{children}</div>
       {panelOpen && (
         <AccountPanel
           account={a}
+          initialTab={panelTab}
           adminData={adminData}
           adminTeams={adminTeams}
           busy={busy}

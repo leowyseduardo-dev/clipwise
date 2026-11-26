@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("argon2")
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from cloud import accounts, billing
+from cloud import accounts, billing, paypal_billing
 from cloud.main import app
 
 ORIGIN = "http://127.0.0.1"
@@ -213,3 +213,162 @@ def test_admin_lists_teams_and_sets_plan(cloud, monkeypatch):
     assert account["plan"] == "Creator"
     assert account["limit"] == 120
     assert cloud.get("/api/admin/teams").status_code == 403
+
+
+def test_paypal_activation_sets_plan_and_quota(cloud, monkeypatch):
+    register(cloud, "buyer@example.test")
+    team = cloud.get("/api/account").json()["team"]
+    details = {
+        "custom_id": team,
+        "plan_id": "P-CREATOR",
+        "status": "ACTIVE",
+        "billing_info": {"next_billing_time": "2099-01-01T00:00:00Z"},
+    }
+    monkeypatch.setattr(
+        paypal_billing,
+        "plan_for",
+        lambda plan_id: "Creator" if plan_id == "P-CREATOR" else "",
+    )
+    monkeypatch.setattr(
+        paypal_billing, "subscription_details", lambda subscription_id: details
+    )
+    response = cloud.post(
+        "/api/billing/paypal/activate",
+        json={"subscription_id": "I-ACTIVE123"},
+    )
+    assert response.is_success
+    assert response.json()["plan"] == "Creator"
+    account = cloud.get("/api/account").json()
+    assert account["plan"] == "Creator"
+    assert account["limit"] == 120
+    assert account["subscription"]["id"] == "I-ACTIVE123"
+    assert account["subscription"]["status"] == "ACTIVE"
+
+
+def test_paypal_activation_activates_approved_subscription(cloud, monkeypatch):
+    register(cloud, "approved@example.test")
+    team = cloud.get("/api/account").json()["team"]
+    state = {"status": "APPROVED"}
+    calls = []
+    details = {
+        "custom_id": team,
+        "plan_id": "P-CREATOR",
+        "billing_info": {"next_billing_time": "2099-01-01T00:00:00Z"},
+    }
+
+    def fake_details(subscription_id):
+        return {**details, "status": state["status"]}
+
+    def fake_api(path, *, method="GET", data=None, request_id=""):
+        calls.append((path, method, data))
+        if path.endswith("/activate"):
+            state["status"] = "ACTIVE"
+        return {}
+
+    monkeypatch.setattr(
+        paypal_billing,
+        "plan_for",
+        lambda plan_id: "Creator" if plan_id == "P-CREATOR" else "",
+    )
+    monkeypatch.setattr(paypal_billing, "subscription_details", fake_details)
+    monkeypatch.setattr(paypal_billing, "api", fake_api)
+    response = cloud.post(
+        "/api/billing/paypal/activate",
+        json={"subscription_id": "I-APPROVED123"},
+    )
+    assert response.is_success
+    assert response.json()["status"] == "ACTIVE"
+    assert any(path.endswith("/activate") for path, _, _ in calls)
+    assert cloud.get("/api/account").json()["plan"] == "Creator"
+
+
+def test_paypal_cancel_does_not_lie_when_remote_fails(cloud, monkeypatch):
+    register(cloud, "cancel@example.test")
+    team = cloud.get("/api/account").json()["team"]
+    accounts.save_subscription(
+        "I-OLD123", team, "Creator", "P-CREATOR", "ACTIVE", "2099-01-01T00:00:00Z"
+    )
+    accounts.set_plan(team, "Creator")
+    monkeypatch.setattr(
+        paypal_billing,
+        "subscription_details",
+        lambda subscription_id: {"status": "ACTIVE"},
+    )
+    monkeypatch.setattr(
+        paypal_billing,
+        "api",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            HTTPException(502, "PayPal no respondio.")
+        ),
+    )
+    response = cloud.post("/api/billing/paypal/cancel")
+    assert response.status_code == 502
+    account = cloud.get("/api/account").json()
+    assert account["plan"] == "Creator"
+    assert accounts.subscription(team)["status"] == "ACTIVE"
+
+
+def test_paypal_webhook_event_activates_team(cloud, monkeypatch):
+    register(cloud, "webhook@example.test")
+    team = cloud.get("/api/account").json()["team"]
+    monkeypatch.setattr(
+        paypal_billing,
+        "plan_for",
+        lambda plan_id: "Studio" if plan_id == "P-STUDIO" else "",
+    )
+    paypal_billing._handle_event(
+        {
+            "event_type": "BILLING.SUBSCRIPTION.ACTIVATED",
+            "resource": {
+                "id": "I-WEBHOOK123",
+                "custom_id": team,
+                "plan_id": "P-STUDIO",
+                "billing_info": {"next_billing_time": "2099-01-01T00:00:00Z"},
+            },
+        }
+    )
+    account = cloud.get("/api/account").json()
+    assert account["plan"] == "Studio"
+    assert account["limit"] == 400
+    assert account["subscription"]["id"] == "I-WEBHOOK123"
+    assert account["subscription"]["status"] == "ACTIVE"
+
+
+def test_paypal_webhook_cannot_downgrade_an_unregistered_team(cloud, monkeypatch):
+    register(cloud, "protected@example.test")
+    team = cloud.get("/api/account").json()["team"]
+    accounts.set_plan(team, "Studio")
+    monkeypatch.setattr(
+        paypal_billing,
+        "plan_for",
+        lambda plan_id: "Studio" if plan_id == "P-STUDIO" else "",
+    )
+    for event_type in (
+        "BILLING.SUBSCRIPTION.CANCELLED",
+        "BILLING.SUBSCRIPTION.EXPIRED",
+        "BILLING.SUBSCRIPTION.SUSPENDED",
+        "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+    ):
+        paypal_billing._handle_event(
+            {
+                "event_type": event_type,
+                "resource": {
+                    "id": "I-UNKNOWN" + event_type[-3:],
+                    "custom_id": team,
+                    "plan_id": "P-STUDIO",
+                },
+            }
+        )
+    assert cloud.get("/api/account").json()["plan"] == "Studio"
+
+
+def test_cancelled_subscription_accepts_naive_renewal_timestamp(cloud):
+    register(cloud, "naive@example.test")
+    team = cloud.get("/api/account").json()["team"]
+    accounts.save_subscription(
+        "I-NAIVE123", team, "Creator", "P-CREATOR", "CANCELLED", "2099-01-01T00:00:00"
+    )
+    accounts.set_plan(team, "Creator")
+    response = cloud.get("/api/account")
+    assert response.is_success
+    assert response.json()["plan"] == "Creator"
