@@ -20,7 +20,7 @@ type DesktopBridgeWindow = Window & {
   __ClipwiseDownloadBridge?: boolean;
 };
 
-const DOWNLOAD_PATH = /^\/api\/(?:clips|jobs|live|tiktok)\//;
+const DOWNLOAD_PATH = /^\/api\/(?:clips|jobs|live)\//;
 const API_POLL_MS = 200;
 const API_POLL_LIMIT = 300;
 

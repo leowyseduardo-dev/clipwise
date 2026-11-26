@@ -202,7 +202,7 @@ export function AccountGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!a.hosted) return <>{children}</>;
+  if (!a.hosted && !a.desktop) return <>{children}</>;
 
   const resetLink =
     typeof window !== "undefined" &&
@@ -214,6 +214,18 @@ export function AccountGate({ children }: { children: ReactNode }) {
   }
 
   if (!a.signed_in) {
+    if (a.desktop) {
+      return (
+        <AuthScreen
+          initialMode={authMode ?? "login"}
+          onBack={() => {
+            setAuthMode(null);
+            setPendingPlan(null);
+          }}
+          onAuthenticated={refresh}
+        />
+      );
+    }
     if (!authMode) {
       return <MarketingPage onStart={startAuth} />;
     }

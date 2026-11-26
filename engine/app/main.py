@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.requests import Request
 
-from . import ai, db, jobs, live, publishing, studio
+from . import ai, db, desktop_accounts, jobs, live, publishing, studio
 from .config import settings
 from .descriptions import build_publication
 from .ingest import IngestError, inspect_source, validate_source_url
@@ -36,19 +36,8 @@ from .models import (
     PublishClipInput,
     PublishingSettingsInput,
     SubtitlesInput,
-    TikTokGrabInput,
-    TikTokRetryInput,
 )
 from .subtitles import cues_to_srt, rebuild_edited_cues
-from .tiktok import (
-    TikTokGrabError,
-    list_grabs,
-    load_grab,
-    reset_stale_grabs,
-    retry_grab,
-    start_grab,
-    _grab_out,
-)
 from .utils import MediaError, binary_status, run_ffmpeg
 
 logging.basicConfig(
@@ -66,13 +55,8 @@ _health_cache: dict[str, Any] | None = None
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
+    desktop_accounts.init()
     ai.load_settings()
-    stale_grabs = reset_stale_grabs()
-    if stale_grabs:
-        logger.warning(
-            "Se marcaron %d descargas de TikTok interrumpidas como fallidas.",
-            stale_grabs,
-        )
     jobs.start_worker()
     live.recover_stale_sessions()
     yield
@@ -309,8 +293,148 @@ def _srt_for_clip(clip: dict[str, Any], workdir: Path) -> str:
 
 
 @app.get("/api/account")
-def desktop_account():
-    return {"hosted": False}
+def desktop_account(request: Request):
+    token = request.cookies.get(desktop_accounts.COOKIE)
+    auto_token = None
+    if not token and desktop_accounts.should_auto_login(request):
+        token = auto_token = desktop_accounts.auto_login()
+    if not token:
+        return {"hosted": False, "desktop": True, "signed_in": False}
+    identity = (
+        desktop_accounts.accounts.principal(auto_token)
+        if auto_token
+        else desktop_accounts.principal(request)
+    )
+    response = JSONResponse(desktop_accounts.info(identity))
+    if auto_token:
+        desktop_accounts.set_cookies(response, auto_token)
+    return response
+
+
+async def _desktop_sign_in(request: Request, register: bool) -> JSONResponse:
+    data = await desktop_accounts.payload(request)
+    email = str(data.get("email") or "").strip()
+    password = str(data.get("password") or "")
+    name = str(data.get("name") or "").strip() if register else ""
+    if register and not data.get("accept_terms"):
+        raise HTTPException(400, "Debes aceptar los términos y la privacidad.")
+    token = desktop_accounts.accounts.account(email, password, register, name)
+    return desktop_accounts.set_cookies(JSONResponse({"ok": True}), token)
+
+
+@app.post("/api/account/register")
+async def desktop_register(request: Request) -> JSONResponse:
+    return await _desktop_sign_in(request, True)
+
+
+@app.post("/api/account/login")
+async def desktop_login(request: Request) -> JSONResponse:
+    return await _desktop_sign_in(request, False)
+
+
+@app.post("/api/account/logout")
+def desktop_logout(request: Request) -> JSONResponse:
+    desktop_accounts.discard_session(request.cookies.get(desktop_accounts.COOKIE, ""))
+    return desktop_accounts.logout_response()
+
+
+@app.post("/api/account/forgot")
+def desktop_forgot() -> dict[str, Any]:
+    raise HTTPException(
+        503,
+        "La recuperación por correo no está configurada en la app portable. "
+        "Usa el panel de administración para generar un enlace.",
+    )
+
+
+@app.post("/api/account/reset")
+async def desktop_reset(request: Request) -> dict[str, Any]:
+    data = await desktop_accounts.payload(request)
+    token = str(data.get("token") or "")
+    password = str(data.get("password") or "")
+    if not token or len(password) < 8:
+        raise HTTPException(400, "Token o contraseña no válidos.")
+    desktop_accounts.accounts.reset_password(token, password)
+    return {"ok": True}
+
+
+@app.put("/api/account/member")
+async def desktop_add_member(request: Request) -> dict[str, Any]:
+    identity = desktop_accounts.principal(request)
+    data = await desktop_accounts.payload(request)
+    return desktop_accounts.add_member(
+        identity, str(data.get("email") or ""), str(data.get("role") or "editor")
+    )
+
+
+@app.delete("/api/account/member")
+def desktop_remove_member(request: Request, email: str) -> dict[str, Any]:
+    return desktop_accounts.remove_member(desktop_accounts.principal(request), email)
+
+
+@app.put("/api/account/team/{team}")
+def desktop_switch_team(team: str, request: Request) -> dict[str, Any]:
+    return desktop_accounts.switch_team(request, team)
+
+
+@app.get("/api/public/config")
+def desktop_public_config() -> dict[str, Any]:
+    return {
+        "paypal": {
+            "configured": False,
+            "client_id": "",
+            "mode": "live",
+            "currency": "USD",
+            "plans": {},
+        }
+    }
+
+
+@app.post("/api/billing/paypal/activate")
+def desktop_paypal_activate() -> None:
+    raise HTTPException(
+        503,
+        "Las suscripciones automáticas se gestionan en la versión web de Clipwise.",
+    )
+
+
+@app.post("/api/billing/paypal/cancel")
+def desktop_paypal_cancel() -> None:
+    raise HTTPException(
+        503,
+        "Las suscripciones automáticas se gestionan en la versión web de Clipwise.",
+    )
+
+
+@app.get("/api/admin/overview")
+def desktop_admin_overview(request: Request) -> dict[str, Any]:
+    desktop_accounts.require_admin(desktop_accounts.principal(request))
+    return desktop_accounts.overview()
+
+
+@app.get("/api/admin/teams")
+def desktop_admin_teams(request: Request) -> dict[str, Any]:
+    desktop_accounts.require_admin(desktop_accounts.principal(request))
+    return desktop_accounts.teams()
+
+
+@app.post("/api/admin/plan")
+async def desktop_admin_plan(request: Request) -> dict[str, Any]:
+    desktop_accounts.require_admin(desktop_accounts.principal(request))
+    data = await desktop_accounts.payload(request)
+    return desktop_accounts.set_plan(str(data.get("team") or ""), str(data.get("plan") or ""))
+
+
+@app.post("/api/admin/suspend")
+def desktop_admin_suspend(request: Request, email: str) -> dict[str, Any]:
+    desktop_accounts.require_admin(desktop_accounts.principal(request))
+    return desktop_accounts.suspend(email)
+
+
+@app.post("/api/admin/reset-link")
+def desktop_admin_reset_link(request: Request, email: str) -> dict[str, str]:
+    desktop_accounts.require_admin(desktop_accounts.principal(request))
+    return desktop_accounts.reset_link(email, str(request.base_url))
 
 
 @app.get("/api/health")
@@ -1032,54 +1156,6 @@ def rerender_clip(clip_id: str, response: Response) -> dict[str, Any]:
     updated = db.get_clip(clip_id)
     assert updated is not None
     return _clip_out(updated)
-
-
-@app.get("/api/tiktok/grabs")
-def list_tiktok_grabs() -> dict[str, Any]:
-    return {"grabs": list_grabs()}
-
-
-@app.get("/api/tiktok/grabs/{grab_id}")
-def get_tiktok_grab(grab_id: str) -> dict[str, Any]:
-    grab = load_grab(grab_id)
-    if not grab:
-        raise HTTPException(status_code=404, detail="Ese grab no existe.")
-    return _grab_out(grab)
-
-
-@app.post("/api/tiktok/grabs", status_code=202)
-def create_tiktok_grab(payload: TikTokGrabInput) -> dict[str, Any]:
-    url = payload.url.strip()
-    if "tiktok.com" not in urlparse(url).netloc:
-        raise HTTPException(
-            status_code=400,
-            detail="Eso no parece una URL de TikTok.",
-        )
-    return start_grab(url, payload.title, payload.auto_publish)
-
-
-@app.post("/api/tiktok/grabs/{grab_id}/retry", status_code=202)
-def retry_tiktok_grab(grab_id: str, payload: TikTokRetryInput) -> dict[str, Any]:
-    try:
-        return retry_grab(grab_id, payload.auto_publish)
-    except TikTokGrabError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.get("/api/tiktok/grabs/{grab_id}/video.mp4")
-def download_tiktok_grab(grab_id: str) -> Response:
-    grab = load_grab(grab_id)
-    if not grab or not grab.get("file"):
-        raise HTTPException(status_code=404, detail="Ese grab no tiene video.")
-    path = Path(grab["file"])
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="El archivo ya no esta.")
-    safe_name = re.sub(r"[^\w\- ]", "", (grab.get("title") or "tiktok")[:60]).strip()
-    return FileResponse(
-        path,
-        media_type="video/mp4",
-        filename=f"{safe_name or 'tiktok'}.mp4",
-    )
 
 
 @app.get("/api/live/sessions")

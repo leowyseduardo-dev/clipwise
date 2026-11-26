@@ -1,23 +1,5 @@
 export type JobStatus = "queued" | "processing" | "ready" | "failed" | "cancelled";
 
-export type TikTokGrabStatus = "queued" | "processing" | "publishing" | "ready" | "failed";
-
-export interface TikTokGrab {
-  id: string;
-  url: string;
-  status: TikTokGrabStatus;
-  stage: string;
-  progress: number;
-  error: string | null;
-  title: string;
-  author: string;
-  clean: boolean;
-  file: string | null;
-  youtube_url: string | null;
-  auto_publish: boolean;
-  created_at?: string | null;
-}
-
 export type LayoutMode =
   | "auto"
   | "vertical"

@@ -30,7 +30,7 @@ _mutex_handle: int | None = None
 _user_closed = False
 _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-_DOWNLOAD_PATH_RE = re.compile(r"^/api/(?:clips|jobs|live|tiktok)/")
+_DOWNLOAD_PATH_RE = re.compile(r"^/api/(?:clips|jobs|live)/")
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _RESERVED_FILENAMES = {
     "CON",

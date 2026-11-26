@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import (
@@ -12,6 +13,7 @@ ROOT = HERE.parent
 ENGINE = ROOT / "engine"
 ASSETS = HERE / "assets"
 MODEL = HERE / "build" / "models" / "tiny"
+WEB_DIST = Path(os.getenv("CLIPWISE_WEB_DIST", str(ROOT / "web" / "dist")))
 
 
 def _ffmpeg_bin() -> Path:
@@ -30,7 +32,7 @@ def _ffmpeg_bin() -> Path:
 FFMPEG_BIN = _ffmpeg_bin()
 
 datas = [
-    (str(ROOT / "web" / "dist"), "web/dist"),
+    (str(WEB_DIST), "web/dist"),
     (str(FFMPEG_BIN / "ffmpeg.exe"), "bin"),
     (str(FFMPEG_BIN / "ffprobe.exe"), "bin"),
 ]

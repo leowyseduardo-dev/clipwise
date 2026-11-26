@@ -2,12 +2,11 @@ import { useAccount } from "./AccountGate";
 import type { Health } from "../lib/types";
 import { IconChevronDown, IconSparkles, LogoMark } from "./icons";
 
-export type AppView = "clips" | "live" | "tiktok" | "ai";
+export type AppView = "clips" | "live" | "ai";
 
 const NAV: { id: AppView; label: string }[] = [
   { id: "clips", label: "Estudio" },
   { id: "live", label: "Directos" },
-  { id: "tiktok", label: "TikTok" },
   { id: "ai", label: "IA" },
 ];
 

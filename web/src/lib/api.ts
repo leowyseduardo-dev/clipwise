@@ -14,7 +14,6 @@ import type {
   PublishingConnections,
   PublishingSettings,
   PublishingSettingsInput,
-  TikTokGrab,
 } from "./types";
 
 export class ApiError extends Error {
@@ -123,28 +122,6 @@ export function deleteJob(jobId: string): Promise<{ deleted: boolean }> {
 
 export function retryClip(clipId: string): Promise<Clip> {
   return sendJson<Clip>(`/api/clips/${clipId}/render`, "POST");
-}
-
-export async function listTikTokGrabs(): Promise<{ grabs: TikTokGrab[] }> {
-  return getJson<{ grabs: TikTokGrab[] }>("/api/tiktok/grabs");
-}
-
-export function getTikTokGrab(grabId: string): Promise<TikTokGrab> {
-  return getJson<TikTokGrab>(`/api/tiktok/grabs/${grabId}`);
-}
-
-export function createTikTokGrab(payload: {
-  url: string;
-  title: string;
-  auto_publish: boolean;
-}): Promise<TikTokGrab> {
-  return sendJson<TikTokGrab>("/api/tiktok/grabs", "POST", payload);
-}
-
-export function publishTikTokGrab(grabId: string): Promise<TikTokGrab> {
-  return sendJson<TikTokGrab>(`/api/tiktok/grabs/${grabId}/retry`, "POST", {
-    auto_publish: true,
-  });
 }
 
 export async function listLiveSessions(): Promise<LiveSession[]> {

@@ -21,6 +21,7 @@ import { PayPalSubscribeButton } from "./PayPalSubscribeButton";
 
 export type Account = {
   hosted: boolean;
+  desktop?: boolean;
   signed_in?: boolean;
   email?: string;
   name?: string;
@@ -565,6 +566,14 @@ export function AccountPanel({
                 </div>
               )}
 
+              {account.desktop && !paypalReady && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-3 text-[11px] leading-relaxed text-blue-700">
+                  Las suscripciones automáticas se gestionan en la versión web de
+                  Clipwise. Aquí puedes ver tu plan y cambiarlo desde el panel de
+                  administración.
+                </div>
+              )}
+
               <div className="space-y-2.5">
                 {Object.entries(account.plans ?? {}).map(([name, limits]) => {
                   const info = PLAN_META[name] ?? PLAN_META.Starter;
@@ -785,7 +794,7 @@ export function AccountPanel({
                   activa al instante, sin solicitudes ni esperas. Las suscripciones
                   automáticas se cancelan desde esta pantalla.
                 </p>
-              ) : (
+              ) : account.desktop ? null : (
                 <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[10px] leading-relaxed text-amber-700">
                   <IconAlert size={13} className="mt-0.5 shrink-0" />
                   PayPal no está configurado en el servidor. Escribe a{" "}

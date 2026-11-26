@@ -22,7 +22,6 @@ import type {
 import { Header, type AppView } from "./components/Header";
 import { AIPanel } from "./components/AIPanel";
 import { NewJobCard } from "./components/NewJobCard";
-import { TikTokPanel } from "./components/TikTokPanel";
 import { LivePanel } from "./components/LivePanel";
 import { JobView } from "./components/JobView";
 import { JobsList } from "./components/JobsList";
@@ -386,10 +385,6 @@ export default function App() {
               }, 80);
             }}
           />
-        </main>
-      ) : view === "tiktok" ? (
-        <main className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-8 sm:px-6 lg:px-8">
-          <TikTokPanel />
         </main>
       ) : view === "live" ? (
         <main className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-8 sm:px-6 lg:px-8">

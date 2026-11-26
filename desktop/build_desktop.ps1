@@ -67,6 +67,17 @@ foreach ($Ref in $WebRefs) {
     if (-not (Test-Path $AssetPath)) { throw "Falta el asset $Ref en web\dist. Vuelve a compilar el frontend." }
 }
 
+# The public installer lives in web/dist/downloads for the website. Do not bundle
+# that 331 MB binary inside the desktop app (it would nest a copy of itself).
+$WebStage = Join-Path $PSScriptRoot "build\webdist"
+if (Test-Path $WebStage) { Remove-Item -Recurse -Force $WebStage }
+New-Item -ItemType Directory -Force -Path $WebStage | Out-Null
+Get-ChildItem (Join-Path $Root "web\dist") -Force |
+    Where-Object { $_.Name -ne "downloads" } |
+    Copy-Item -Destination $WebStage -Recurse -Force
+$env:CLIPWISE_WEB_DIST = $WebStage
+Write-Host "Web staging listo (sin el instalador anidado)."
+
 Write-Host "Generando icono..."
 & $Python (Join-Path $PSScriptRoot "make_icon.py")
 if ($LASTEXITCODE -ne 0) { throw "Fallo la generacion del icono." }
@@ -89,6 +100,7 @@ if ($LASTEXITCODE -ne 0) { throw "Fallo PyInstaller." }
 
 $Exe = Join-Path $ReleaseDir "Clipwise\Clipwise.exe"
 if (-not (Test-Path $Exe)) { throw "No se genero $Exe" }
+Remove-Item Env:CLIPWISE_WEB_DIST -ErrorAction SilentlyContinue
 
 if (-not $SkipInstaller) {
     $IsccCandidates = @(
