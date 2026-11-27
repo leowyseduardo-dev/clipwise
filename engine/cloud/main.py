@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from . import accounts, billing, mailer, paypal_billing, seed
+from . import accounts, billing, hls_proxy, mailer, paypal_billing, seed
 from .workers import Engines
 
 # The hosted process shares the engine's .env so one file configures both.
@@ -252,6 +252,11 @@ def info(request: Request):
         "subscription": subscription,
         "admin": i["email"].lower() in admin_emails,
     }
+
+
+@app.get("/api/public/hls")
+async def public_hls(request: Request, u: str = ""):
+    return await hls_proxy.stream(request, u)
 
 
 @app.get("/api/public/config")

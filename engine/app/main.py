@@ -19,6 +19,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.requests import Request
 
+from cloud import hls_proxy
+
 from . import ai, db, desktop_accounts, jobs, live, publishing, studio
 from .config import settings
 from .descriptions import build_publication
@@ -375,6 +377,11 @@ def desktop_remove_member(request: Request, email: str) -> dict[str, Any]:
 @app.put("/api/account/team/{team}")
 def desktop_switch_team(team: str, request: Request) -> dict[str, Any]:
     return desktop_accounts.switch_team(request, team)
+
+
+@app.get("/api/public/hls")
+async def desktop_public_hls(request: Request, u: str = ""):
+    return await hls_proxy.stream(request, u)
 
 
 @app.get("/api/public/config")

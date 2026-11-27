@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { captureHlsWindow } from "../lib/hlsCapture";
+import { attachHls, type HlsHandle } from "../lib/hlsSource";
 import {
   probeVideo,
   renderClip,
@@ -56,7 +58,13 @@ const HOOK_STYLES: Array<{ value: OverlayStyle; label: string }> = [
 ];
 
 export function BrowserClipStudio() {
+  const [mode, setMode] = useState<"file" | "hls">("file");
   const [file, setFile] = useState<File | null>(null);
+  const [streamUrl, setStreamUrl] = useState("");
+  const [streamInfo, setStreamInfo] = useState("");
+  const [captureProgress, setCaptureProgress] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<HlsHandle | null>(null);
   const [duration, setDuration] = useState(0);
   const [sourceSize, setSourceSize] = useState("");
   const [start, setStart] = useState(0);
@@ -81,8 +89,13 @@ export function BrowserClipStudio() {
     };
   }, [resultUrl]);
 
+  useEffect(() => {
+    return () => hlsRef.current?.destroy();
+  }, []);
+
   const cues = useMemo(() => parseCues(cuesText), [cuesText]);
-  const canRender = Boolean(file) && end > start && !busy;
+  const hasSource = mode === "file" ? Boolean(file) : Boolean(streamUrl) && duration > 0;
+  const canRender = hasSource && end > start && !busy;
 
   async function chooseFile(next: File | null) {
     setFile(next);
@@ -107,15 +120,51 @@ export function BrowserClipStudio() {
     }
   }
 
+  async function loadStream() {
+    setError("");
+    setResultUrl("");
+    setStreamInfo("");
+    setCaptureProgress(0);
+    hlsRef.current?.destroy();
+    const video = videoRef.current;
+    if (!video || !streamUrl.trim()) return;
+    try {
+      hlsRef.current = await attachHls(video, streamUrl);
+      const seconds = Number.isFinite(video.duration) ? video.duration : 0;
+      setDuration(seconds);
+      setStart(0);
+      setEnd(Math.min(seconds, 30));
+      setStreamInfo(
+        `${video.videoWidth || "?"}×${video.videoHeight || "?"} · ${seconds.toFixed(1)} s`,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo cargar el stream.");
+    }
+  }
+
   async function render() {
-    if (!file || end <= start) return;
+    if (!hasSource || end <= start) return;
     setBusy(true);
     setError("");
     setProgress(0);
+    setCaptureProgress(0);
     if (resultUrl) URL.revokeObjectURL(resultUrl);
     setResultUrl("");
     try {
-      const blob = await renderClip(file, {
+      let source = file;
+      if (mode === "hls") {
+        const captured = await captureHlsWindow({
+          url: streamUrl,
+          start,
+          seconds: end - start,
+          onProgress: (value) => setCaptureProgress(Math.round(value * 100)),
+        });
+        source = new File([captured], "stream-capture.webm", {
+          type: captured.type || "video/webm",
+        });
+      }
+      if (!source) throw new Error("No hay vídeo de origen.");
+      const blob = await renderClip(source, {
         start,
         end,
         template,
@@ -161,17 +210,76 @@ export function BrowserClipStudio() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <label className="block text-sm font-medium">Archivo de vídeo (MP4/MOV)</label>
-            <input
-              type="file"
-              accept="video/*"
-              onChange={(event) => void chooseFile(event.target.files?.[0] ?? null)}
-              className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white"
-            />
+            <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
+              {(["file", "hls"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setMode(value);
+                    setError("");
+                    setResultUrl("");
+                    setCaptureProgress(0);
+                  }}
+                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    mode === value
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {value === "file" ? "Archivo local" : "Stream HLS"}
+                </button>
+              ))}
+            </div>
+
+            <video ref={videoRef} className="hidden" muted playsInline />
+
+            {mode === "file" ? (
+              <>
+                <label className="mt-4 block text-sm font-medium">
+                  Archivo de vídeo (MP4/MOV)
+                </label>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(event) => void chooseFile(event.target.files?.[0] ?? null)}
+                  className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white"
+                />
+              </>
+            ) : (
+              <>
+                <label className="mt-4 block text-sm font-medium">
+                  URL de Kick / Twitch (HLS)
+                </label>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="url"
+                    value={streamUrl}
+                    onChange={(event) => setStreamUrl(event.target.value)}
+                    placeholder="https://www.kick.com/canal"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void loadStream()}
+                    disabled={!streamUrl.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    Cargar
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  El stream pasa por el proxy seguro de Clipwise y se captura con
+                  WebCodecs + canvas, sin FFmpeg en el servidor.
+                </p>
+              </>
+            )}
+
             {duration > 0 && (
               <p className="mt-2 text-xs text-slate-500">
                 Duración: {duration.toFixed(2)} s
                 {sourceSize ? ` · Fuente: ${sourceSize}` : ""}
+                {streamInfo ? ` · Stream: ${streamInfo}` : ""}
               </p>
             )}
 
@@ -338,7 +446,11 @@ export function BrowserClipStudio() {
               onClick={() => void render()}
               className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
             >
-              {busy ? `Renderizando… ${progress}%` : "Generar clip 1080×1920"}
+              {busy
+                ? mode === "hls" && captureProgress < 100
+                  ? `Capturando stream… ${captureProgress}%`
+                  : `Renderizando… ${progress}%`
+                : "Generar clip 1080×1920"}
             </button>
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           </section>
