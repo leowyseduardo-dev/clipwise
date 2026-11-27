@@ -5,6 +5,7 @@ import { clipSourceUrl, uploadBrowserRender } from "../lib/api";
 import { downloadName, formatTime } from "../lib/format";
 import type { Clip, SubtitleCue } from "../lib/types";
 import {
+  buildTimeline,
   createFrameRenderer,
   renderClip,
   type CaptionStyle,
@@ -34,6 +35,21 @@ type VirocutSaved = {
   focus_y?: number;
   captions_enabled?: boolean;
   background?: string;
+  speed?: number;
+  cuts?: Array<[number, number]>;
+  pins?: Array<{ time: number; focusX: number; focusY: number; zoom?: number }>;
+  slot_zooms?: Record<string, number>;
+  muted?: boolean;
+};
+
+type EditState = {
+  speed: number;
+  cuts: Array<[number, number]>;
+  pins: NonNullable<VirocutSaved["pins"]>;
+  slotZooms: Record<string, number>;
+  muted: boolean;
+  focusX: number;
+  focusY: number;
 };
 
 type Props = {
@@ -192,6 +208,16 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
   const [background, setBackground] = useState<"blur" | "black">(
     saved.background === "black" ? "black" : "blur",
   );
+  const [speed, setSpeed] = useState(clamp(saved.speed ?? 1, 0.25, 4));
+  const [cuts, setCuts] = useState<Array<[number, number]>>(saved.cuts ?? []);
+  const [pins, setPins] = useState<NonNullable<VirocutSaved["pins"]>>(saved.pins ?? []);
+  const [slotZooms, setSlotZooms] = useState<Record<string, number>>(
+    saved.slot_zooms ?? {},
+  );
+  const [muted, setMuted] = useState(saved.muted ?? false);
+  const [cutStart, setCutStart] = useState<number | null>(null);
+  const [history, setHistory] = useState<EditState[]>([]);
+  const [future, setFuture] = useState<EditState[]>([]);
 
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -209,12 +235,72 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
   const timeRef = useRef(0);
   const lastUiTime = useRef(0);
 
-  const words = useMemo(
-    () => cuesToWords(clip.subtitles.cues ?? []),
-    [clip.subtitles.cues],
+  const snapshot = useCallback(
+    (): EditState => ({
+      speed,
+      cuts,
+      pins,
+      slotZooms,
+      muted,
+      focusX,
+      focusY,
+    }),
+    [speed, cuts, pins, slotZooms, muted, focusX, focusY],
   );
+
+  const edit = useCallback(
+    (apply: () => void) => {
+      setHistory((items) => [...items, snapshot()].slice(-40));
+      setFuture([]);
+      apply();
+    },
+    [snapshot],
+  );
+
+  const undo = useCallback(() => {
+    setHistory((items) => {
+      if (!items.length) return items;
+      const previous = items[items.length - 1];
+      setFuture((next) => [snapshot(), ...next].slice(0, 40));
+      setSpeed(previous.speed);
+      setCuts(previous.cuts);
+      setPins(previous.pins);
+      setSlotZooms(previous.slotZooms);
+      setMuted(previous.muted);
+      setFocusX(previous.focusX);
+      setFocusY(previous.focusY);
+      return items.slice(0, -1);
+    });
+  }, [snapshot]);
+
+  const redo = useCallback(() => {
+    setFuture((items) => {
+      if (!items.length) return items;
+      const next = items[0];
+      setHistory((past) => [...past, snapshot()].slice(-40));
+      setSpeed(next.speed);
+      setCuts(next.cuts);
+      setPins(next.pins);
+      setSlotZooms(next.slotZooms);
+      setMuted(next.muted);
+      setFocusX(next.focusX);
+      setFocusY(next.focusY);
+      return items.slice(1);
+    });
+  }, [snapshot]);
+
+  const words = useMemo(() => {
+    const shift = -Math.max(0, Number(clip.start));
+    return cuesToWords(clip.subtitles.cues ?? [])
+      .map((word) => ({ ...word, start: word.start + shift, end: word.end + shift }))
+      .filter((word) => word.end > 0 && word.start < Math.max(0.1, shift + Number(clip.end)));
+  }, [clip.subtitles.cues, clip.start, clip.end]);
   const clipDuration = Math.max(0.1, Number(clip.end) - Number(clip.start));
   const baseStart = Math.max(0, Number(clip.start) - sourceOffset);
+  const timeline = useMemo(
+    () => buildTimeline(0, clipDuration, cuts, speed),
+    [clipDuration, cuts, speed],
+  );
 
   const renderer = useMemo(
     () =>
@@ -231,6 +317,10 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
         hookStyle,
         watermark,
         background,
+        cuts,
+        speed,
+        pins,
+        slotZooms,
       }),
     [
       template,
@@ -244,6 +334,10 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
       watermark,
       background,
       clipDuration,
+      cuts,
+      speed,
+      pins,
+      slotZooms,
     ],
   );
 
@@ -254,9 +348,9 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
       if (!canvas || !video || video.readyState < 2) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      renderer(ctx, video, canvas.width, canvas.height, clamp(value, 0, clipDuration));
+      renderer(ctx, video, canvas.width, canvas.height, clamp(value, 0, timeline.outputDuration));
     },
-    [renderer, clipDuration],
+    [renderer, timeline],
   );
 
   useEffect(() => {
@@ -336,23 +430,32 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
     const tick = () => {
       const video = videoRef.current;
       if (!video) return;
-      const value = clamp(video.currentTime - baseStart, 0, clipDuration);
+      const sourceValue = clamp(video.currentTime - baseStart, 0, clipDuration);
+      const skipped = cuts.find(([from, to]) => sourceValue > from && sourceValue < to);
+      if (skipped) {
+        video.currentTime = baseStart + skipped[1] + 0.01;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      const value = timeline.toOutput(sourceValue) ?? 0;
       timeRef.current = value;
       if (Math.abs(value - lastUiTime.current) > 0.04) {
         lastUiTime.current = value;
         setTime(value);
       }
       drawAt(value);
-      if (video.ended || value >= clipDuration - 0.02) {
+      if (video.ended || value >= timeline.outputDuration - 0.02) {
         setPlaying(false);
-        setTime(clipDuration);
+        setTime(timeline.outputDuration);
         return;
       }
       frame = requestAnimationFrame(tick);
     };
+    const activeVideo = videoRef.current;
+    if (activeVideo) activeVideo.playbackRate = speed;
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, baseStart, clipDuration, drawAt]);
+  }, [playing, baseStart, clipDuration, cuts, speed, timeline, drawAt]);
 
   function handleLoaded() {
     const video = videoRef.current;
@@ -375,11 +478,12 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
       setPlaying(false);
       return;
     }
-    if (timeRef.current >= clipDuration - 0.05) {
+    if (timeRef.current >= timeline.outputDuration - 0.05) {
       timeRef.current = 0;
       setTime(0);
       video.currentTime = baseStart;
     }
+    video.playbackRate = speed;
     try {
       await video.play();
       setPlaying(true);
@@ -390,7 +494,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
 
   function handleSeek(value: number) {
     const video = videoRef.current;
-    const next = clamp(value, 0, clipDuration);
+    const next = clamp(value, 0, timeline.outputDuration);
     timeRef.current = next;
     lastUiTime.current = next;
     setTime(next);
@@ -398,7 +502,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
       drawAt(next);
       return;
     }
-    video.currentTime = baseStart + next;
+    video.currentTime = baseStart + timeline.toSource(next);
     video.addEventListener("seeked", () => drawAt(next), { once: true });
   }
 
@@ -418,9 +522,17 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
     setHookStyle("impact");
     setFocusX(0.5);
     setFocusY(0.42);
-    setWatermark(clip.overlay?.render_options?.brand_text ?? "clipwise");
+    setWatermark(clip.overlay?.render_options?.brand_text ?? "");
     setCaptionsEnabled(true);
     setBackground("blur");
+    edit(() => {
+      setSpeed(1);
+      setCuts([]);
+      setPins([]);
+      setSlotZooms({});
+      setMuted(false);
+      setCutStart(null);
+    });
   }
 
   async function handleExport() {
@@ -445,6 +557,11 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
         hookStyle,
         watermark: watermark.trim(),
         background,
+        cuts,
+        speed,
+        pins,
+        slotZooms,
+        muted,
         onProgress: setProgress,
       });
       const url = URL.createObjectURL(blob);
@@ -482,6 +599,11 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
           focus_y: focusY,
           captions_enabled: captionsEnabled,
           background,
+          speed,
+          cuts,
+          pins,
+          slot_zooms: slotZooms,
+          muted,
         },
         setSaveProgress,
       );
@@ -554,7 +676,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
             onLoadedMetadata={handleLoaded}
             onEnded={() => {
               setPlaying(false);
-              setTime(clipDuration);
+              setTime(timeline.outputDuration);
             }}
             className="pointer-events-none absolute h-px w-px opacity-0"
           />
@@ -579,17 +701,181 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
             <input
               type="range"
               min={0}
-              max={clipDuration}
+              max={timeline.outputDuration}
               step={0.01}
-              value={Math.min(time, clipDuration)}
+              value={Math.min(time, timeline.outputDuration)}
               onChange={(event) => handleSeek(Number(event.target.value))}
               disabled={!ready}
               className="min-w-0 flex-1 accent-veru-ember"
               aria-label="Posición del clip"
             />
             <span className="shrink-0 text-[10px] tabular-nums text-veru-paper/45">
-              {formatTime(time)} / {formatTime(clipDuration)}
+              {formatTime(time)} / {formatTime(timeline.outputDuration)}
             </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-veru-paper/10 bg-black/20 px-3 py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-veru-paper/40">
+              Timeline
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                edit(() =>
+                  setPins((items) => [
+                    ...items.filter((pin) => Math.abs(pin.time - timeRef.current) > 0.05),
+                    {
+                      time: timeRef.current,
+                      focusX,
+                      focusY,
+                      zoom: slotZooms.main ?? 1,
+                    },
+                  ]),
+                )
+              }
+              className="rounded-lg border border-veru-paper/15 px-2.5 py-1.5 text-[11px] text-veru-paper/80 transition hover:border-veru-ember/60"
+            >
+              Pin
+            </button>
+            <button
+              type="button"
+              onClick={() => setCutStart(timeRef.current)}
+              className="rounded-lg border border-veru-paper/15 px-2.5 py-1.5 text-[11px] text-veru-paper/80 transition hover:border-veru-ember/60"
+            >
+              Inicio corte
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                edit(() => {
+                  const at = timeRef.current;
+                  const from = cutStart ?? Math.max(0, at - 0.3);
+                  const to = Math.max(from + 0.1, cutStart === null ? at + 0.3 : at);
+                  setCuts((items) => [...items, [from, to]]);
+                  setCutStart(null);
+                })
+              }
+              className="rounded-lg border border-rose-400/30 px-2.5 py-1.5 text-[11px] text-rose-200 transition hover:bg-rose-500/10"
+            >
+              Borrar trozo
+            </button>
+            {[0.5, 1, 1.5, 2].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => edit(() => setSpeed(value))}
+                className={`rounded-lg px-2 py-1.5 text-[11px] transition ${
+                  speed === value
+                    ? "bg-veru-ember text-white"
+                    : "border border-veru-paper/15 text-veru-paper/70 hover:border-veru-ember/60"
+                }`}
+              >
+                {value}x
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => edit(() => setMuted((value) => !value))}
+              className={`rounded-lg border px-2.5 py-1.5 text-[11px] transition ${
+                muted
+                  ? "border-veru-ember bg-veru-ember/20 text-veru-ember"
+                  : "border-veru-paper/15 text-veru-paper/70"
+              }`}
+            >
+              {muted ? "Sin sonido" : "Sonido"}
+            </button>
+            <button
+              type="button"
+              onClick={undo}
+              disabled={!history.length}
+              className="rounded-lg border border-veru-paper/15 px-2.5 py-1.5 text-[11px] text-veru-paper/70 disabled:opacity-30"
+            >
+              Deshacer
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={!future.length}
+              className="rounded-lg border border-veru-paper/15 px-2.5 py-1.5 text-[11px] text-veru-paper/70 disabled:opacity-30"
+            >
+              Rehacer
+            </button>
+            {cuts.length > 0 && (
+              <span className="text-[10px] text-veru-paper/40">
+                {cuts.length} corte{cuts.length === 1 ? "" : "s"}
+              </span>
+            )}
+            {pins.length > 0 && (
+              <span className="text-[10px] text-veru-paper/40">
+                {pins.length} pin{pins.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-veru-paper/10 bg-black/20 px-3 py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-veru-paper/40">
+              Zoom por recuadro
+            </span>
+            {(template === "cam_juego" || template === "dos_cams_juego" ||
+              template === "tres_cams_juego" || template === "dividido") && (
+              <label className="flex items-center gap-2 text-[10px] text-veru-paper/60">
+                Cámara
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.1}
+                  value={slotZooms.cam ?? slotZooms.top ?? slotZooms.cam_a ?? 1}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    edit(() =>
+                      setSlotZooms((items) => ({
+                        ...items,
+                        cam: value,
+                        cam_a: value,
+                        top: value,
+                      })),
+                    );
+                  }}
+                  className="w-24 accent-veru-ember"
+                />
+              </label>
+            )}
+            {(template === "cam_juego" || template === "dos_cams_juego" ||
+              template === "tres_cams_juego" || template === "dividido") && (
+              <label className="flex items-center gap-2 text-[10px] text-veru-paper/60">
+                Juego
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.1}
+                  value={slotZooms.game ?? slotZooms.bottom ?? 1}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    edit(() =>
+                      setSlotZooms((items) => ({ ...items, game: value, bottom: value })),
+                    );
+                  }}
+                  className="w-24 accent-veru-ember"
+                />
+              </label>
+            )}
+            <label className="flex items-center gap-2 text-[10px] text-veru-paper/60">
+              Principal
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.1}
+                value={slotZooms.main ?? 1}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  edit(() => setSlotZooms((items) => ({ ...items, main: value })));
+                }}
+                className="w-24 accent-veru-ember"
+              />
+            </label>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

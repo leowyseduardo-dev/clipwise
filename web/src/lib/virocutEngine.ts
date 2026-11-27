@@ -51,6 +51,11 @@ export type RenderOptions = {
   hookStyle?: OverlayStyle;
   watermark?: string;
   background?: "blur" | "black";
+  speed?: number;
+  cuts?: Array<[number, number]>;
+  pins?: Array<{ time: number; focusX: number; focusY: number; zoom?: number }>;
+  slotZooms?: Record<string, number>;
+  muted?: boolean;
   width?: number;
   height?: number;
   fps?: number;
@@ -591,6 +596,81 @@ function drawWatermark(
   ctx.restore();
 }
 
+export type Timeline = {
+  duration: number;
+  outputDuration: number;
+  toSource: (time: number) => number;
+  toOutput: (time: number) => number | null;
+};
+
+function normalizeCuts(
+  cuts: Array<[number, number]> | undefined,
+  duration: number,
+): Array<[number, number]> {
+  const valid = (cuts ?? [])
+    .map(([rawStart, rawEnd]) => [clamp(rawStart, 0, duration), clamp(rawEnd, 0, duration)] as [number, number])
+    .filter(([start, end]) => end - start > 0.05)
+    .sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of valid) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1] + 0.01) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
+/** Map an edited output timeline back to the original clip and captions. */
+export function buildTimeline(
+  start: number,
+  end: number,
+  cuts: Array<[number, number]> | undefined,
+  speedInput: number | undefined,
+): Timeline {
+  const duration = Math.max(0.05, end - start);
+  const speed = clamp(speedInput ?? 1, 0.25, 4);
+  const ranges = normalizeCuts(cuts, duration);
+  const removed = ranges.reduce((sum, [a, b]) => sum + (b - a), 0);
+  const outputDuration = Math.max(0.05, (duration - removed) / speed);
+
+  const toSource = (time: number): number => {
+    let source = clamp(time, 0, outputDuration) * speed;
+    for (const [cutStart, cutEnd] of ranges) {
+      if (source < cutStart) break;
+      if (source < cutEnd) source = cutEnd;
+      else source += cutEnd - cutStart;
+    }
+    return start + clamp(source, 0, duration);
+  };
+
+  const toOutput = (time: number): number | null => {
+    const relative = clamp(time - start, 0, duration);
+    let output = relative;
+    for (const [cutStart, cutEnd] of ranges) {
+      if (relative >= cutEnd) output -= cutEnd - cutStart;
+      else if (relative > cutStart) return null;
+    }
+    return clamp(output / speed, 0, outputDuration);
+  };
+
+  return { duration, outputDuration, toSource, toOutput };
+}
+
+export function remapWords(
+  words: Word[],
+  timeline: Timeline,
+): Word[] {
+  return words
+    .map((word) => {
+      const start = timeline.toOutput(word.start);
+      const end = timeline.toOutput(word.end);
+      if (start === null || end === null || end - start <= 0.01) return null;
+      return { start, end, text: word.text };
+    })
+    .filter((word): word is Word => word !== null)
+    .sort((a, b) => a.start - b.start);
+}
+
 function sourceRect(
   videoWidth: number,
   videoHeight: number,
@@ -598,26 +678,48 @@ function sourceRect(
   destHeight: number,
   focusX: number,
   focusY: number,
+  zoom = 1,
 ): { sx: number; sy: number; sw: number; sh: number } {
   const destAspect = destWidth / destHeight;
   const videoAspect = videoWidth / videoHeight;
+  const factor = clamp(zoom, 1, 8);
   if (videoAspect > destAspect) {
-    const sw = videoHeight * destAspect;
-    const sh = videoHeight;
+    const sw = (videoHeight * destAspect) / factor;
+    const sh = videoHeight / factor;
     return {
       sx: clamp(focusX * videoWidth - sw / 2, 0, videoWidth - sw),
-      sy: 0,
+      sy: clamp(videoHeight / 2 - sh / 2, 0, videoHeight - sh),
       sw,
       sh,
     };
   }
-  const sw = videoWidth;
-  const sh = videoWidth / destAspect;
+  const sw = videoWidth / factor;
+  const sh = videoWidth / destAspect / factor;
   return {
-    sx: 0,
+    sx: clamp(videoWidth / 2 - sw / 2, 0, videoWidth - sw),
     sy: clamp(focusY * videoHeight - sh / 2, 0, videoHeight - sh),
     sw,
     sh,
+  };
+}
+
+function focusAt(
+  pins: Array<{ time: number; focusX: number; focusY: number; zoom?: number }> | undefined,
+  time: number,
+  baseX: number,
+  baseY: number,
+): { x: number; y: number; zoom: number } {
+  const sorted = [...(pins ?? [])].sort((a, b) => a.time - b.time);
+  let active = sorted[0];
+  for (const pin of sorted) {
+    if (pin.time <= time + 0.001) active = pin;
+    else break;
+  }
+  if (!active) return { x: baseX, y: baseY, zoom: 1 };
+  return {
+    x: clamp(active.focusX, 0, 1),
+    y: clamp(active.focusY, 0, 1),
+    zoom: clamp(active.zoom ?? 1, 1, 8),
   };
 }
 
@@ -637,6 +739,8 @@ function drawFrame(
   watermark: string,
   background: "blur" | "black" | undefined,
   time: number,
+  frameFocus: { x: number; y: number; zoom: number } = { x: focusX, y: focusY, zoom: 1 },
+  slotZooms: Record<string, number> = {},
 ): void {
   const config = TEMPLATES[template];
   const videoWidth = video.videoWidth;
@@ -668,8 +772,9 @@ function drawFrame(
       videoHeight,
       dw,
       dh,
-      isGame ? 0.5 : focusX,
-      isGame ? 0.5 : focusY,
+      isGame ? 0.5 : frameFocus.x,
+      isGame ? 0.5 : frameFocus.y,
+      isGame ? (slotZooms[slot.id] ?? 1) : (slotZooms[slot.id] ?? frameFocus.zoom),
     );
     ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, dx, dy, dw, dh);
   }
@@ -736,6 +841,49 @@ async function resampleAudioBuffer(
   return context.startRendering();
 }
 
+async function buildEditedAudio(
+  input: Input,
+  start: number,
+  end: number,
+  cuts: Array<[number, number]> | undefined,
+  speed: number,
+): Promise<AudioBuffer | null> {
+  const duration = Math.max(0.05, end - start);
+  const ranges = normalizeCuts(cuts, duration);
+  const kept: Array<[number, number]> = [];
+  let cursor = 0;
+  for (const [cutStart, cutEnd] of ranges) {
+    if (cutStart > cursor) kept.push([cursor, cutStart]);
+    cursor = Math.max(cursor, cutEnd);
+  }
+  if (cursor < duration) kept.push([cursor, duration]);
+
+  const parts: AudioBuffer[] = [];
+  for (const [from, to] of kept) {
+    const part = await extractAudioBuffer(input, start + from, start + to);
+    if (part) parts.push(part);
+  }
+  if (!parts.length) return null;
+  const sampleRate = parts[0].sampleRate;
+  const frames = parts.reduce((sum, part) => sum + part.length, 0);
+  const joined = new AudioBuffer({ length: frames, numberOfChannels: 2, sampleRate });
+  let offset = 0;
+  for (const part of parts) {
+    joined.getChannelData(0).set(part.getChannelData(0), offset);
+    joined.getChannelData(1).set(part.getChannelData(1), offset);
+    offset += part.length;
+  }
+  if (speed === 1) return joined;
+  const outputFrames = Math.max(1, Math.ceil(joined.duration / speed * sampleRate));
+  const offline = new OfflineAudioContext(2, outputFrames, sampleRate);
+  const source = offline.createBufferSource();
+  source.buffer = joined;
+  source.playbackRate.value = speed;
+  source.connect(offline.destination);
+  source.start();
+  return offline.startRendering();
+}
+
 async function chooseAudioCodec(): Promise<"aac" | "opus" | null> {
   try {
     if (await canEncodeAudio("aac")) return "aac";
@@ -769,7 +917,9 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
   const sourceDuration = await input.computeDuration();
   const start = clamp(options.start, 0, Math.max(0, sourceDuration - 0.05));
   const end = clamp(options.end, start + 0.05, sourceDuration);
-  const clipDuration = end - start;
+  const speed = clamp(options.speed ?? 1, 0.25, 4);
+  const timeline = buildTimeline(start, end, options.cuts, speed);
+  const clipDuration = timeline.outputDuration;
 
   const video = document.createElement("video");
   video.muted = true;
@@ -781,8 +931,8 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
   await once(video, "loadeddata", 20000);
   video.pause();
 
-  const words = options.words?.length ? options.words : cuesToWords(options.cues ?? []);
-  const groups = groupWords(words);
+  const sourceWords = options.words?.length ? options.words : cuesToWords(options.cues ?? []);
+  const groups = groupWords(remapWords(sourceWords, timeline));
   const captionsEnabled = options.captionsEnabled ?? groups.length > 0;
 
   const canvas = document.createElement("canvas");
@@ -807,11 +957,11 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
   const audioCodec = await chooseAudioCodec();
   let audioBuffer: AudioBuffer | null = null;
   let audioSource: AudioBufferSource | null = null;
-  if (audioCodec) {
+  if (audioCodec && !options.muted) {
     try {
-      audioBuffer = await extractAudioBuffer(input, start, end);
-      if (audioBuffer) {
-        // Chrome's AAC encoder only accepts 44.1/48 kHz; sources are often 22.05 kHz.
+      audioBuffer = await buildEditedAudio(input, start, end, options.cuts, speed);
+      if (audioBuffer && (speed !== 1 || options.cuts?.length)) {
+        // Rebuilt buffers can keep the source sample rate; normalize for AAC.
         audioBuffer = await resampleAudioBuffer(audioBuffer, 48000);
       }
     } catch {
@@ -827,8 +977,8 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
   const totalFrames = Math.max(1, Math.round(clipDuration * fps));
   try {
     for (let frame = 0; frame < totalFrames; frame += 1) {
-      const time = start + frame / fps;
-      await seek(video, time);
+      const outputTime = frame / fps;
+      await seek(video, timeline.toSource(outputTime));
       drawFrame(
         ctx,
         video,
@@ -844,7 +994,9 @@ export async function renderClip(file: File, options: RenderOptions): Promise<Bl
         hookStyle,
         options.watermark ?? "",
         options.background,
-        frame / fps,
+        outputTime,
+        focusAt(options.pins, outputTime, focusX, focusY),
+        options.slotZooms,
       );
       await videoSource.add(frame / fps, 1 / fps);
       options.onProgress?.(0.05 + (frame / totalFrames) * 0.9);
@@ -891,13 +1043,20 @@ export function createFrameRenderer(options: RenderOptions): FrameRenderer {
   const template = options.template ?? "vertical";
   const focusX = clamp(options.focusX ?? 0.5, 0, 1);
   const focusY = clamp(options.focusY ?? 0.42, 0, 1);
-  const words = options.words?.length ? options.words : cuesToWords(options.cues ?? []);
-  const groups = groupWords(words);
+  const timeline = buildTimeline(
+    options.start ?? 0,
+    options.end ?? 0.05,
+    options.cuts,
+    options.speed,
+  );
+  const sourceWords = options.words?.length ? options.words : cuesToWords(options.cues ?? []);
+  const groups = groupWords(remapWords(sourceWords, timeline));
   const captionsEnabled = options.captionsEnabled ?? groups.length > 0;
   const captionStyle = options.captionStyle ?? "default";
   const hookStyle = options.hookStyle ?? "impact";
 
   return (ctx, video, width, height, time) => {
+    const outputTime = clamp(time, 0, timeline.outputDuration);
     drawFrame(
       ctx,
       video,
@@ -913,7 +1072,9 @@ export function createFrameRenderer(options: RenderOptions): FrameRenderer {
       hookStyle,
       options.watermark ?? "",
       options.background,
-      time,
+      outputTime,
+      focusAt(options.pins, outputTime, focusX, focusY),
+      options.slotZooms,
     );
   };
 }
