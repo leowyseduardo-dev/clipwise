@@ -282,6 +282,7 @@ export function BrowserClipStudio() {
               </p>
             )}
 
+            <div className="hidden">
             <div className="mt-5 grid grid-cols-2 gap-4">
               <label className="text-sm">
                 <span className="block font-medium">Inicio (s)</span>
@@ -307,6 +308,7 @@ export function BrowserClipStudio() {
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
                 />
               </label>
+            </div>
             </div>
 
             <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">

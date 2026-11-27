@@ -433,6 +433,15 @@ export function NewJobCard({
           </div>
         )}
 
+        <details className="group rounded-2xl border border-slate-200 bg-slate-50">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-medium text-slate-600">
+            <span className="flex items-center gap-2">
+              <IconSparkles size={14} className="text-veru-ember" />
+              Ajustes avanzados (opcional) — por defecto Clipwise decide todo
+            </span>
+            <IconChevronDown size={14} className="text-slate-400 transition group-open:rotate-180" />
+          </summary>
+          <div className="space-y-4 border-t border-slate-200 px-4 py-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="label-xs">Creador / canal</span>
@@ -526,6 +535,8 @@ export function NewJobCard({
             </p>
           )}
         </div>
+          </div>
+        </details>
 
         <details className="group rounded-2xl border border-slate-200 bg-slate-50">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-medium text-slate-600">
