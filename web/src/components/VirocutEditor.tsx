@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-
 import { clipSourceUrl, uploadBrowserRender } from "../lib/api";
 import { downloadName, formatTime } from "../lib/format";
 import type { Clip, SubtitleCue } from "../lib/types";
@@ -506,15 +504,6 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
     video.addEventListener("seeked", () => drawAt(next), { once: true });
   }
 
-  function handleCanvasPoint(event: ReactPointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    setFocusX(clamp((event.clientX - rect.left) / rect.width, 0, 1));
-    setFocusY(clamp((event.clientY - rect.top) / rect.height, 0, 1));
-  }
-
   function resetLook() {
     setTemplate(mapLayout(clip.overlay?.render_options?.layout));
     setCaptionStyle(mapCaption(clip.style));
@@ -635,7 +624,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
           Editor Virocut
         </span>
         <span className="text-[11px] leading-relaxed text-veru-paper/40">
-          Encuadre, capas y subtítulos en el navegador
+          Motor automático: plantilla, subtítulos y gancho detectados
         </span>
       </div>
 
@@ -646,8 +635,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
               ref={canvasRef}
               width={PREVIEW_WIDTH}
               height={PREVIEW_HEIGHT}
-              onPointerDown={handleCanvasPoint}
-              className="block w-full cursor-crosshair"
+              className="block w-full"
               aria-label="Vista previa del clip"
             />
             {loadingSource && (
@@ -714,6 +702,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
             </span>
           </div>
 
+          <div className="hidden">
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-veru-paper/10 bg-black/20 px-3 py-2">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-veru-paper/40">
               Timeline
@@ -877,6 +866,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
               />
             </label>
           </div>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -966,6 +956,25 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
         </div>
 
         <div className="min-w-0 space-y-4">
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-3.5">
+            <p className="flex items-center gap-2 text-[11px] font-semibold text-emerald-200">
+              <IconWand size={13} />
+              Automático
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-veru-paper/55">
+              Clipwise eligió la plantilla, el encuadre, el estilo de subtítulos y el
+              gancho a partir del análisis del vídeo. No hay que configurar nada.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-veru-paper/45">
+              <span>Plantilla: <strong className="text-veru-paper/80">{template}</strong></span>
+              <span>Subtítulos: <strong className="text-veru-paper/80">{captionStyle}</strong></span>
+              <span>Gancho: <strong className="text-veru-paper/80">{hook.trim() ? "sí" : "no"}</strong></span>
+              <span>Marca: <strong className="text-veru-paper/80">{watermark.trim() ? "sí" : "no"}</strong></span>
+            </div>
+          </section>
+        </div>
+
+        <div className="hidden">
           <section className="rounded-2xl border border-veru-paper/10 bg-veru-paper/[0.03] p-3.5">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-veru-paper/45">

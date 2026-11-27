@@ -198,9 +198,8 @@ export function BrowserClipStudio() {
               De vídeo largo a clip vertical
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Pipeline portado de Virocut: <code>CanvasSource</code> +{" "}
-              <code>AudioBufferSource</code> + <code>Mp4OutputFormat</code>. Render
-              frame a frame en WebCodecs, sin FFmpeg y sin servidor de render.
+              Motor Virocut automático: plantilla, subtítulos y gancho se eligen
+              solos. Render frame a frame en WebCodecs, sin FFmpeg y sin servidor de render.
             </p>
           </div>
           <a href="/" className="text-sm font-medium text-blue-600 hover:underline">
@@ -310,9 +309,9 @@ export function BrowserClipStudio() {
               </label>
             </div>
 
-            <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4" open>
+            <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <summary className="cursor-pointer text-sm font-semibold">
-                Motor Virocut: layout, subtítulos y hook
+                Ajustes avanzados (opcional) — por defecto todo es automático
               </summary>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
