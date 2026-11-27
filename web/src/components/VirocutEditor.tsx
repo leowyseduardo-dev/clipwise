@@ -184,7 +184,7 @@ export function VirocutEditor({ clip, onClose, onUpdated, onError }: Props) {
   const [focusX, setFocusX] = useState(clamp(saved.focus_x ?? 0.5, 0, 1));
   const [focusY, setFocusY] = useState(clamp(saved.focus_y ?? 0.42, 0, 1));
   const [watermark, setWatermark] = useState(
-    saved.watermark ?? clip.overlay?.render_options?.brand_text ?? "clipwise",
+    saved.watermark ?? clip.overlay?.render_options?.brand_text ?? "",
   );
   const [captionsEnabled, setCaptionsEnabled] = useState(
     saved.captions_enabled ?? true,

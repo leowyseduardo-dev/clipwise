@@ -1769,6 +1769,10 @@ def render_clip(
     style = str(clip.get("style") or settings.default_subtitle_style)
     title_card: dict[str, Any] | None = None
     card_text = str(options.get("title_card") or "").strip()
+    # Generated clips should carry the same opening hook the Virocut editor
+    # shows, unless the caller explicitly supplied a title card.
+    if not card_text and bool(options.get("auto_hook", True)):
+        card_text = str(clip.get("hook") or "").strip()
     if card_text:
         title_card = {
             "text": card_text,
@@ -1866,4 +1870,6 @@ def render_clip(
         "thumb": thumb_path,
         "ass": clip_dir / ass_name,
         "duration": round(out_duration, 3),
+        "template": template,
+        "layout": str(options.get("layout") or "auto"),
     }

@@ -134,6 +134,7 @@ def _options(job: dict[str, Any]) -> dict[str, Any]:
         "title_card_seconds": 4.0,
         "title_card_position": "top",
         "title_card_style": "impact",
+        "auto_hook": True,
     }
     options.update(job.get("options") or {})
     return options
@@ -150,7 +151,55 @@ def _render_options(options: dict[str, Any]) -> dict[str, Any]:
         "title_card_seconds": float(options.get("title_card_seconds") or 4.0),
         "title_card_position": str(options.get("title_card_position") or "top"),
         "title_card_style": str(options.get("title_card_style") or "impact"),
+        "auto_hook": bool(options.get("auto_hook", True)),
     }
+
+
+_VIROCUT_TEMPLATES = {"trio_juego": "trio"}
+_VIROCUT_CAPTIONS = {
+    "shorts": "default",
+    "impact": "default",
+    "bold": "default",
+    "default": "default",
+    "minimal": "minimal",
+    "clean": "minimal",
+    "caja": "caja",
+    "box": "caja",
+    "pildora": "pildora",
+    "pill": "pildora",
+    "neon": "neon",
+    "amarillo": "amarillo",
+    "yellow": "amarillo",
+}
+
+
+def _virocut_overlay(
+    clip: dict[str, Any],
+    render_options: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Store the resolved render so the Virocut editor opens the same look."""
+    template = str(result.get("template") or "vertical")
+    template = _VIROCUT_TEMPLATES.get(template, template)
+    style = str(clip.get("style") or "shorts")
+    caption_style = _VIROCUT_CAPTIONS.get(style, "default")
+    saved = {
+        "template": template,
+        "caption_style": caption_style,
+        "hook": str(clip.get("hook") or ""),
+        "hook_style": "impact",
+        "watermark": str(render_options.get("brand_text") or ""),
+        "focus_x": 0.5,
+        "focus_y": 0.42,
+        "captions_enabled": True,
+        "background": "blur",
+    }
+    overlay = dict(clip.get("overlay") or {})
+    resolved = dict(overlay.get("render_options") or {})
+    resolved.update(saved)
+    overlay["render_options"] = resolved
+    overlay["virocut"] = saved
+    return overlay
 
 
 def _section_clip(clip: dict[str, Any]) -> dict[str, Any]:
@@ -568,6 +617,7 @@ def _process_job(job_id: str) -> None:
                     duration=result["duration"],
                     video_file=result["video"].relative_to(workdir).as_posix(),
                     thumb_file=result["thumb"].relative_to(workdir).as_posix(),
+                    overlay_json=_virocut_overlay(clip, render_options, result),
                     error=None,
                 )
                 cleanup_old_outputs(
@@ -674,6 +724,7 @@ def process_clip_render(clip_id: str) -> None:
             duration=result["duration"],
             video_file=result["video"].relative_to(workdir).as_posix(),
             thumb_file=result["thumb"].relative_to(workdir).as_posix(),
+            overlay_json=_virocut_overlay(clip, render_options, result),
             error=None,
         )
         cleanup_old_outputs(
