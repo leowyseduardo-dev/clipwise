@@ -76,7 +76,10 @@ class Settings:
         self.llm_timeout = _env_int("LLM_TIMEOUT_SECONDS", 90)
 
         self.max_upload_bytes = _env_int("MAX_UPLOAD_MB", 16384) * 1024 * 1024
-        self.max_source_seconds = _env_int("MAX_SOURCE_MINUTES", 720) * 60
+        # 0 means no duration cap. Streams use the audio-first path above
+        # LONG_SOURCE_MINUTES, which keeps disk use bounded without a hard stop.
+        configured_minutes = _env_int("MAX_SOURCE_MINUTES", 0)
+        self.max_source_seconds = configured_minutes * 60 if configured_minutes > 0 else 0
 
         # Sources above this length use the audio-first path: only the audio is
         # downloaded for transcription, then each clip downloads its own

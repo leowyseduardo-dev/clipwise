@@ -81,7 +81,7 @@ class Engines:
                 YOUTUBE_PRIVACY="private",
                 TIKTOK_PRIVACY="SELF_ONLY",
                 MAX_UPLOAD_MB=os.getenv("CLIPFORGE_CLOUD_UPLOAD_MB", "512"),
-                MAX_SOURCE_MINUTES=os.getenv("CLIPFORGE_CLOUD_MAX_MINUTES", "180"),
+                MAX_SOURCE_MINUTES=os.getenv("CLIPFORGE_CLOUD_MAX_MINUTES", "0"),
             )
             log = (path / "engine.log").open("ab")
             try:

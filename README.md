@@ -247,7 +247,7 @@ Copia `engine/.env.example` a `engine/.env`. Todas las variables son opcionales;
 | `LLM_MODEL` | `gpt-4o-mini` | Modelo a usar. También vale Ollama, p. ej. `llama3.1` en `http://localhost:11434/v1`. |
 | `LLM_TIMEOUT_SECONDS` | `90` | Timeout de la llamada al LLM. |
 | `MAX_UPLOAD_MB` | `2048` | Tamaño máximo del video subido. |
-| `MAX_SOURCE_MINUTES` | `180` | Duración máxima del video de origen. |
+| `MAX_SOURCE_MINUTES` | `0` | Duración máxima del video de origen; `0` significa sin límite. |
 | `SUBTITLE_FONT` | `Arial` | Fuente usada en el ASS. |
 | `SUBTITLE_STYLE` | `bold` | Estilo por defecto. |
 | `MUSIC_VOLUME` | `0.14` | Volumen de la música respecto a la voz. |
@@ -422,7 +422,7 @@ El script usa la fuente sintética de 136 s incluida en `tools/e2e/`, comprueba 
 ## Rendimiento y límites
 
 - **Un trabajo a la vez**: un único worker procesa la cola. Los trabajos enviados mientras hay otro en curso esperan.
-- **Duración**: hasta 180 minutos de origen; subida máxima de 2 GB.
+- **Duración**: sin límite de minutos de origen; subida máxima de 2 GB. Los vídeos largos usan el modo audio-first por tramos.
 - **Clips**: 5–15 por trabajo; cada clip dura entre 15 y 90 s.
 - **Resolución de salida**: 1080×1920, H.264 High, AAC 160 kbps, `+faststart`.
 - **Transcripción**: `tiny` es el más rápido; `small` mejora la calidad. En CPU, 136 s de audio con `tiny` tardaron ~57 s en el entorno de desarrollo.

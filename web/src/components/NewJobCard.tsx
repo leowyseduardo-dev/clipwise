@@ -127,9 +127,13 @@ export function NewJobCard({
   const layoutChoices = layouts?.length ? layouts : DEFAULT_LAYOUTS;
   const selectedLayout = layoutChoices.find((item) => item.id === layout);
   const sourceLimitLabel =
-    longSourceMinutes && longSourceMinutes < maxSourceMinutes
-      ? `${maxSourceMinutes} min · audio-first desde ${longSourceMinutes} min`
-      : `${maxSourceMinutes} min`;
+    maxSourceMinutes <= 0
+      ? longSourceMinutes
+        ? `sin límite · audio-first desde ${longSourceMinutes} min`
+        : "sin límite de duración"
+      : longSourceMinutes && longSourceMinutes < maxSourceMinutes
+        ? `${maxSourceMinutes} min · audio-first desde ${longSourceMinutes} min`
+        : `${maxSourceMinutes} min`;
 
   function pickVideos(files: File[]) {
     if (!files.length) return;

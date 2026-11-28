@@ -340,7 +340,7 @@ def _validate_source_info(info: dict[str, Any]) -> None:
     duration = float(info.get("duration") or 0)
     if duration <= 0:
         raise IngestError("No se pudo determinar la duración del video.")
-    if duration > settings.max_source_seconds:
+    if settings.max_source_seconds > 0 and duration > settings.max_source_seconds:
         raise IngestError(
             f"El video dura {duration / 60:.0f} minutos; el limite es "
             f"{settings.max_source_seconds / 60:.0f} minutos."
@@ -729,7 +729,7 @@ def inspect_source(path: Path) -> dict[str, Any]:
         info = probe_media(path)
     except MediaError as exc:
         raise IngestError(str(exc)) from exc
-    if info["duration"] > settings.max_source_seconds:
+    if settings.max_source_seconds > 0 and info["duration"] > settings.max_source_seconds:
         raise IngestError(
             f"El video dura {info['duration'] / 60:.0f} minutos; el limite es "
             f"{settings.max_source_seconds / 60:.0f} minutos."

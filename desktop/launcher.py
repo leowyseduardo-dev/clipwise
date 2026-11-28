@@ -25,6 +25,8 @@ MUTEX_NAME = r"Local\Clipwise.Desktop.SingleInstance"
 WINDOW_TITLE = "Clipwise"
 # Kept as ClipForge so existing local libraries and settings survive the rebrand.
 DATA_DIR_NAME = "ClipForge"
+OWNER_EMAIL = "Leowysgarcia@gmail.com"
+OWNER_PASSWORD = "Leowys123"
 
 _mutex_handle: int | None = None
 _user_closed = False
@@ -247,6 +249,8 @@ def _configure_environment(data_dir: Path) -> None:
     os.environ.setdefault("HF_HOME", str(data_dir / "models" / "hf"))
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("CLIPFORGE_DESKTOP_OWNER_EMAIL", OWNER_EMAIL)
+    os.environ.setdefault("CLIPFORGE_DESKTOP_OWNER_PASSWORD", OWNER_PASSWORD)
 
 
 def _set_up_logging(data_dir: Path) -> Path:
